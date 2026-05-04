@@ -7,7 +7,7 @@ import ServiceWorkerRegister from "./ServiceWorkerRegister";
 
 export default function RootShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const withoutSidebar = pathname === "/auth" || pathname === "/installer";
+  const withoutSidebar = pathname === "/installer";
 
   return (
     <CloudSyncProvider>

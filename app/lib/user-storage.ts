@@ -10,8 +10,8 @@ export type LocalUser = {
 const USERS_KEY = "sage-users";
 const CURRENT_USER_KEY = "sage-current-user";
 const DEFAULT_USER: LocalUser = {
-  id: "etienne",
-  name: "Étienne"
+  id: "enseignant",
+  name: "Enseignant"
 };
 
 export const SYNCED_DATA_KEYS = [

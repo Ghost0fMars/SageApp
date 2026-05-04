@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
-import { getCurrentUser, type LocalUser } from "../lib/user-storage";
 import { supabase, supabaseConfigured } from "../lib/supabase-client";
 import AssistantChat from "./AssistantChat";
 
@@ -100,16 +99,14 @@ const navigation: { href: string; label: string; icon: React.ReactNode }[] = [
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const [user, setUser] = useState<LocalUser | null>(null);
   const [cloudEmail, setCloudEmail] = useState<string | null>(null);
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [isStandalone, setIsStandalone] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
-    setUser(getCurrentUser());
     setMobileMenuOpen(false);
-  }, [pathname, cloudEmail]);
+  }, [pathname]);
 
   useEffect(() => {
     setIsStandalone(
@@ -253,11 +250,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <div className="w-full max-w-full rounded-xl bg-white/5 p-3">
           <div className="flex min-w-0 items-center gap-3">
             <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-teal-600 font-bold text-white">
-              {user?.name?.charAt(0).toUpperCase() ?? "U"}
+              E
             </div>
             <div className="min-w-0 flex-1 overflow-hidden">
               <p className="whitespace-normal break-words text-sm font-semibold leading-5 text-white [overflow-wrap:anywhere]">
-                {user?.name ?? "Utilisateur"}
+                Enseignant
               </p>
               <p className="mt-0.5 whitespace-normal break-words text-xs leading-4 text-white/50 [overflow-wrap:anywhere]" title={cloudEmail ?? undefined}>
                 {cloudEmail ?? "Données locales"}

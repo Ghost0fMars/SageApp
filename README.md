@@ -33,14 +33,10 @@ Créez un fichier `.env.local` à la racine du projet :
 ```env
 OPENAI_API_KEY=votre_cle_api_openai
 OPENAI_MODEL=gpt-5.4-mini
-NEXT_PUBLIC_GOOGLE_CLIENT_ID=votre_client_id_google
-NEXT_PUBLIC_GOOGLE_API_KEY=votre_api_key_google
+
 ```
 
 La clé reste côté serveur grâce à la route `app/api/generate-objective/route.ts`.
-
-Pour Google Agenda, activez l'API Google Calendar dans Google Cloud, créez un client OAuth
-Web et une clé API, puis ajoutez `http://localhost:3000` dans les origines JavaScript autorisées.
 
 ## Démarrage
 
