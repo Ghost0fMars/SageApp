@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { AiConfigForm } from "../components/AiConfigModal";
 
 const PROFILE_KEY = "sage-profile";
-const HELP_EMAIL = "alacle.association@gmail.com";
+const HELP_EMAIL = "contact@alacle.org";
 
 type Profile = {
   firstName: string;

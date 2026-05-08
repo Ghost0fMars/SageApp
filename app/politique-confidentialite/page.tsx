@@ -48,10 +48,10 @@ export default function PolitiqueConfidentialitePage() {
               Pour toute question ou demande d'aide, vous pouvez contacter l'association à l'adresse
               suivante :
               <a
-                href="mailto:alacle.association@gmail.com"
+                href="mailto:contact@alacle.org"
                 className="ml-1 font-semibold text-teal-700 underline-offset-4 hover:underline"
               >
-                alacle.association@gmail.com
+                contact@alacle.org
               </a>
               .
             </p>

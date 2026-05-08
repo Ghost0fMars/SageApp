@@ -1,6 +1,6 @@
 ﻿import { NextResponse } from "next/server";
 
-const ADMIN_EMAIL = process.env.ADMIN_NOTIFICATION_EMAIL ?? "alacle.association@gmail.com";
+const ADMIN_EMAIL = process.env.ADMIN_NOTIFICATION_EMAIL ?? "contact@alacle.org";
 const EMAIL_FROM = process.env.NOTIFICATION_EMAIL_FROM ?? "Sage <onboarding@resend.dev>";
 
 type SignupNotificationBody = {
