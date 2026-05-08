@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
+import { callAiProvider, type AiProvider } from "../../lib/ai-provider";
 
 type GenerateSequenceRequest = {
+  aiProvider?: string;
+  aiApiKey?: string;
   cycle?: string;
   niveau?: string;
   domaine?: string;
@@ -63,7 +66,7 @@ function sequenceValide(sequence: Sequence) {
     seance.phase
       .toLowerCase()
       .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[̀-ͯ]/g, "")
   );
 
   const phasesObligatoires = [
@@ -85,34 +88,11 @@ function sequenceValide(sequence: Sequence) {
   );
 }
 
-export async function POST(request: Request) {
-  const apiKey = process.env.OPENAI_API_KEY;
+const SYSTEM_PROMPT =
+  "Tu aides un enseignant à construire des séquences pédagogiques progressives, réalistes et adaptées au niveau des élèves. Tu respectes strictement le format JSON demandé.";
 
-  if (!apiKey) {
-    return NextResponse.json(
-      { error: "La variable OPENAI_API_KEY est manquante dans .env.local." },
-      { status: 500 }
-    );
-  }
-
-  const contexte = (await request.json()) as GenerateSequenceRequest;
-
-  if (
-    !contexte.cycle ||
-    !contexte.niveau ||
-    !contexte.domaine ||
-    !contexte.sousDomaine ||
-    !contexte.item ||
-    !contexte.competence ||
-    !contexte.objectif
-  ) {
-    return NextResponse.json(
-      { error: "Tous les éléments sélectionnés et l'objectif sont obligatoires." },
-      { status: 400 }
-    );
-  }
-
-  const promptSequence = `
+function buildPrompt(contexte: Omit<GenerateSequenceRequest, "aiProvider" | "aiApiKey">) {
+  return `
 Crée une progression de séquence pédagogique à partir de ces informations :
 - Cycle : ${contexte.cycle}
 - Niveau : ${contexte.niveau}
@@ -142,6 +122,80 @@ Réponds uniquement avec un JSON valide, sans Markdown, au format suivant :
   ]
 }
 `;
+}
+
+export async function POST(request: Request) {
+  const body = (await request.json()) as GenerateSequenceRequest;
+  const { aiProvider, aiApiKey, ...contexte } = body;
+
+  if (
+    !contexte.cycle ||
+    !contexte.niveau ||
+    !contexte.domaine ||
+    !contexte.sousDomaine ||
+    !contexte.item ||
+    !contexte.competence ||
+    !contexte.objectif
+  ) {
+    return NextResponse.json(
+      { error: "Tous les éléments sélectionnés et l'objectif sont obligatoires." },
+      { status: 400 }
+    );
+  }
+
+  const prompt = buildPrompt(contexte);
+
+  async function parseSequence(texte: string) {
+    const sequence = extraireJson(texte);
+    if (!sequenceValide(sequence)) {
+      throw new Error(
+        "La séquence générée est incomplète : elle doit contenir introduction, entraînement, approfondissement, synthèse et évaluation."
+      );
+    }
+    return sequence;
+  }
+
+  if (aiProvider && aiApiKey && aiProvider !== "none") {
+    try {
+      const texte = await callAiProvider({
+        provider: aiProvider as AiProvider,
+        apiKey: aiApiKey,
+        system: SYSTEM_PROMPT,
+        prompt,
+        maxTokens: 1800
+      });
+
+      const sequence = await parseSequence(texte);
+      return NextResponse.json({ sequence });
+    } catch (error) {
+      return NextResponse.json(
+        {
+          error: error instanceof Error ? error.message : "Erreur lors de l'appel à l'IA.",
+          details: ""
+        },
+        { status: error instanceof SyntaxError ? 502 : 500 }
+      );
+    }
+  }
+
+  if (aiProvider === "none") {
+    return NextResponse.json(
+      {
+        error:
+          "L'assistant IA n'est pas configuré. Rendez-vous dans les Paramètres pour choisir un fournisseur."
+      },
+      { status: 400 }
+    );
+  }
+
+  const apiKey = process.env.OPENAI_API_KEY;
+
+  if (!apiKey) {
+    return NextResponse.json(
+      { error: "Aucune IA configurée. Veuillez choisir un fournisseur IA dans les Paramètres." },
+      { status: 500 }
+    );
+  }
 
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
@@ -150,14 +204,11 @@ Réponds uniquement avec un JSON valide, sans Markdown, au format suivant :
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
-      model: process.env.OPENAI_MODEL ?? "gpt-5.4-mini",
-      instructions:
-        "Tu aides un enseignant à construire des séquences pédagogiques progressives, réalistes et adaptées au niveau des élèves. Tu respectes strictement le format JSON demandé.",
-      input: promptSequence,
+      model: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
+      instructions: SYSTEM_PROMPT,
+      input: prompt,
       max_output_tokens: 1800,
-      reasoning: {
-        effort: "none"
-      }
+      reasoning: { effort: "none" }
     })
   });
 
@@ -173,14 +224,7 @@ Réponds uniquement avec un JSON valide, sans Markdown, au format suivant :
   const texte = extraireTexteOpenAI(data);
 
   try {
-    const sequence = extraireJson(texte);
-
-    if (!sequenceValide(sequence)) {
-      throw new Error(
-        "La séquence générée est incomplète : elle doit contenir introduction, entraînement, approfondissement, synthèse et évaluation."
-      );
-    }
-
+    const sequence = await parseSequence(texte);
     return NextResponse.json({ sequence });
   } catch (error) {
     return NextResponse.json(

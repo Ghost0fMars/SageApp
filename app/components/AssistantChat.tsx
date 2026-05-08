@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "../lib/supabase-client";
 import { readUserData } from "../lib/user-storage";
+import { readAiConfig } from "../lib/ai-config";
 
 type Message = {
   role: "user" | "assistant";
@@ -164,20 +165,31 @@ export default function AssistantChat() {
     setStreaming(true);
 
     try {
+      const aiConfig = readAiConfig();
+
+      if (!aiConfig || aiConfig.provider === "none") {
+        throw new Error(
+          "L'assistant IA n'est pas configuré. Rendez-vous dans les Paramètres pour choisir un fournisseur."
+        );
+      }
+
       const { data } = supabase ? await supabase.auth.getSession() : { data: { session: null } };
       const token = data.session?.access_token;
 
-      if (!token) {
-        throw new Error("Connectez-vous pour utiliser l'assistant.");
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
       }
 
       const response = await fetch("/api/chat", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({ messages: newMessages, context })
+        headers,
+        body: JSON.stringify({
+          messages: newMessages,
+          context,
+          aiProvider: aiConfig.provider,
+          aiApiKey: aiConfig.apiKey
+        })
       });
 
       const result = (await response.json()) as { content?: string; error?: string };

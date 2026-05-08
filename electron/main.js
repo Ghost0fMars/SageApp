@@ -1,0 +1,109 @@
+const { app, BrowserWindow, shell } = require('electron')
+const { spawn } = require('child_process')
+const path = require('path')
+const http = require('http')
+
+const PORT = 3721
+let mainWindow = null
+let serverProcess = null
+
+function waitForServer() {
+  return new Promise((resolve) => {
+    const started = Date.now()
+    const interval = setInterval(() => {
+      const req = http.get(`http://127.0.0.1:${PORT}`, () => {
+        clearInterval(interval)
+        resolve()
+      })
+      req.on('error', () => {})
+      req.end()
+      if (Date.now() - started > 30000) {
+        clearInterval(interval)
+        resolve()
+      }
+    }, 400)
+  })
+}
+
+function startServer() {
+  const runnerPath = path.join(__dirname, 'server-runner.js')
+  serverProcess = spawn(process.execPath, [runnerPath], {
+    env: {
+      ...process.env,
+      ELECTRON_RUN_AS_NODE: '1',
+      PORT: String(PORT),
+      HOSTNAME: '127.0.0.1',
+      NODE_ENV: 'production',
+      IS_PACKAGED: '1',
+      RESOURCES_PATH: process.resourcesPath,
+    },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
+
+  serverProcess.stdout?.on('data', (d) => process.stdout.write('[sage] ' + d))
+  serverProcess.stderr?.on('data', (d) => process.stderr.write('[sage] ' + d))
+
+  serverProcess.on('exit', (code) => {
+    if (code !== 0 && code !== null) {
+      console.error(`[sage] Server exited with code ${code}`)
+    }
+  })
+}
+
+async function createWindow() {
+  mainWindow = new BrowserWindow({
+    width: 1400,
+    height: 900,
+    minWidth: 900,
+    minHeight: 600,
+    title: 'Sage',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      nodeIntegration: false,
+      contextIsolation: true,
+    },
+    show: false,
+  })
+
+  // Ouvrir les liens externes dans le navigateur par défaut
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith(`http://127.0.0.1:${PORT}`)) return { action: 'allow' }
+    shell.openExternal(url)
+    return { action: 'deny' }
+  })
+
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (!url.startsWith(`http://127.0.0.1:${PORT}`) && !url.startsWith('http://localhost:')) {
+      event.preventDefault()
+      shell.openExternal(url)
+    }
+  })
+
+  mainWindow.once('ready-to-show', () => mainWindow.show())
+  mainWindow.on('closed', () => { mainWindow = null })
+
+  if (app.isPackaged) {
+    startServer()
+    await waitForServer()
+    mainWindow.loadURL(`http://127.0.0.1:${PORT}`)
+  } else {
+    // Mode développement : Next.js tourne déjà via 'next dev'
+    mainWindow.loadURL('http://localhost:3000')
+    mainWindow.webContents.openDevTools()
+  }
+}
+
+app.whenReady().then(createWindow)
+
+app.on('window-all-closed', () => {
+  serverProcess?.kill()
+  if (process.platform !== 'darwin') app.quit()
+})
+
+app.on('before-quit', () => {
+  serverProcess?.kill()
+})
+
+app.on('activate', () => {
+  if (!mainWindow) createWindow()
+})

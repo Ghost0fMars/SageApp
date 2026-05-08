@@ -16,11 +16,6 @@ const iconProps = {
   strokeLinejoin: "round" as const
 };
 
-type BeforeInstallPromptEvent = Event & {
-  prompt: () => Promise<void>;
-  userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
-};
-
 const icons = {
   dashboard: (
     <svg {...iconProps}>
@@ -78,13 +73,13 @@ const icons = {
       <path d="M7 10h9" />
     </svg>
   ),
-  download: (
+  logout: (
     <svg {...iconProps}>
-      <path d="M10 2v10" />
-      <path d="M6 8l4 4 4-4" />
-      <path d="M3 14v2a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2" />
+      <path d="M12 4h3a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-3" />
+      <path d="M8 6L4 10l4 4" />
+      <path d="M13 10H4" />
     </svg>
-  )
+  ),
 };
 
 const navigation: { href: string; label: string; icon: React.ReactNode }[] = [
@@ -97,41 +92,28 @@ const navigation: { href: string; label: string; icon: React.ReactNode }[] = [
   { href: "/parametres", label: "Paramètres", icon: icons.sliders }
 ];
 
+type Profile = { firstName: string; lastName: string; school: string };
+
+const PROFILE_KEY = "sage-profile";
+
+function readProfile(): Profile {
+  try {
+    const stored = localStorage.getItem(PROFILE_KEY);
+    if (stored) return JSON.parse(stored) as Profile;
+  } catch { /* ignore */ }
+  return { firstName: "", lastName: "", school: "" };
+}
+
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [cloudEmail, setCloudEmail] = useState<string | null>(null);
-  const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
-  const [isStandalone, setIsStandalone] = useState(false);
+  const [profile, setProfile] = useState<Profile>({ firstName: "", lastName: "", school: "" });
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     setMobileMenuOpen(false);
+    setProfile(readProfile());
   }, [pathname]);
-
-  useEffect(() => {
-    setIsStandalone(
-      window.matchMedia("(display-mode: standalone)").matches ||
-        ("standalone" in window.navigator && Boolean(window.navigator.standalone))
-    );
-
-    function handleBeforeInstallPrompt(event: Event) {
-      event.preventDefault();
-      setInstallPrompt(event as BeforeInstallPromptEvent);
-    }
-
-    function handleAppInstalled() {
-      setInstallPrompt(null);
-      setIsStandalone(true);
-    }
-
-    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
-    window.addEventListener("appinstalled", handleAppInstalled);
-
-    return () => {
-      window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
-      window.removeEventListener("appinstalled", handleAppInstalled);
-    };
-  }, []);
 
   useEffect(() => {
     if (!supabase) {
@@ -149,23 +131,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     return () => listener.subscription.unsubscribe();
   }, []);
 
-  async function installerApplication() {
-    if (!installPrompt) {
-      window.alert(
-        "Pour installer Sage, ouvrez le menu du navigateur puis choisissez Ajouter à l'écran d'accueil ou Installer l'application."
-      );
-      return;
-    }
-
-    await installPrompt.prompt();
-    const choice = await installPrompt.userChoice;
-
-    if (choice.outcome === "accepted") {
-      setInstallPrompt(null);
-      setIsStandalone(true);
-    }
-  }
-
   async function deconnecter() {
     if (!supabase) {
       return;
@@ -182,17 +147,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <p className="font-bold text-white">Sage</p>
         <p className="text-xs text-white/50">Portail enseignant</p>
       </div>
-
-      {!isStandalone && (
-        <button
-          type="button"
-          onClick={installerApplication}
-          className="mt-5 flex w-full items-center gap-3 rounded-lg bg-teal-600 px-3 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-teal-700"
-        >
-          <span className="flex w-5 items-center justify-center">{icons.download}</span>
-          Installer Sage
-        </button>
-      )}
 
       <nav className="mt-6 grid gap-1">
         {navigation.map((item) => {
@@ -250,27 +204,27 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <div className="w-full max-w-full rounded-xl bg-white/5 p-3">
           <div className="flex min-w-0 items-center gap-3">
             <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-teal-600 font-bold text-white">
-              E
+              {(profile.firstName || profile.lastName || "E")[0].toUpperCase()}
             </div>
             <div className="min-w-0 flex-1 overflow-hidden">
               <p className="whitespace-normal break-words text-sm font-semibold leading-5 text-white [overflow-wrap:anywhere]">
-                Enseignant
+                {[profile.firstName, profile.lastName].filter(Boolean).join(" ") || "Enseignant"}
               </p>
               <p className="mt-0.5 whitespace-normal break-words text-xs leading-4 text-white/50 [overflow-wrap:anywhere]" title={cloudEmail ?? undefined}>
-                {cloudEmail ?? "Données locales"}
+                {profile.school || cloudEmail || "Données locales"}
               </p>
             </div>
+            {supabaseConfigured && cloudEmail && (
+              <button
+                type="button"
+                onClick={deconnecter}
+                title="Se déconnecter"
+                className="shrink-0 grid h-8 w-8 place-items-center rounded-lg text-white/50 transition hover:bg-white/10 hover:text-white"
+              >
+                {icons.logout}
+              </button>
+            )}
           </div>
-
-          {supabaseConfigured && cloudEmail && (
-            <button
-              type="button"
-              onClick={deconnecter}
-              className="mt-4 w-full rounded-lg border border-white/15 px-3 py-2.5 text-sm font-semibold text-white/75 transition hover:bg-white/10 hover:text-white"
-            >
-              Déconnexion
-            </button>
-          )}
         </div>
       </div>
     </>

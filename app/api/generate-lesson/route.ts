@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { callAiProvider, type AiProvider } from "../../lib/ai-provider";
 
 type SeanceSequence = {
   numero?: number;
@@ -10,6 +11,8 @@ type SeanceSequence = {
 };
 
 type GenerateLessonRequest = {
+  aiProvider?: string;
+  aiApiKey?: string;
   cycle?: string;
   niveau?: string;
   domaine?: string;
@@ -83,36 +86,12 @@ function seanceValide(seance: SeanceDetaillee) {
   );
 }
 
-export async function POST(request: Request) {
-  const apiKey = process.env.OPENAI_API_KEY;
+const SYSTEM_PROMPT =
+  "Tu aides un enseignant à préparer des séances concrètes, progressives et adaptées au contexte de classe. Tu respectes strictement le format JSON demandé.";
 
-  if (!apiKey) {
-    return NextResponse.json(
-      { error: "La variable OPENAI_API_KEY est manquante dans .env.local." },
-      { status: 500 }
-    );
-  }
-
-  const contexte = (await request.json()) as GenerateLessonRequest;
-
-  if (
-    !contexte.cycle ||
-    !contexte.niveau ||
-    !contexte.domaine ||
-    !contexte.sousDomaine ||
-    !contexte.item ||
-    !contexte.competence ||
-    !contexte.objectifSequence ||
-    !contexte.seance?.titre ||
-    !contexte.seance?.objectif
-  ) {
-    return NextResponse.json(
-      { error: "Les éléments de contexte, l'objectif et la séance choisie sont obligatoires." },
-      { status: 400 }
-    );
-  }
-
-  const promptSeance = `
+function buildPrompt(contexte: Omit<GenerateLessonRequest, "aiProvider" | "aiApiKey">) {
+  const s = contexte.seance!;
+  return `
 Prépare une séance détaillée à partir de ces informations :
 - Cycle : ${contexte.cycle}
 - Niveau : ${contexte.niveau}
@@ -121,10 +100,10 @@ Prépare une séance détaillée à partir de ces informations :
 - Item : ${contexte.item}
 - Compétence : ${contexte.competence}
 - Objectif de la séquence : ${contexte.objectifSequence}
-- Séance à préparer : séance ${contexte.seance.numero ?? ""}, phase "${contexte.seance.phase ?? ""}", titre "${contexte.seance.titre}"
-- Objectif de cette séance : ${contexte.seance.objectif}
-- Activité prévue dans la progression : ${contexte.seance.activite ?? ""}
-- Trace ou production prévue : ${contexte.seance.traceOuProduction ?? ""}
+- Séance à préparer : séance ${s.numero ?? ""}, phase "${s.phase ?? ""}", titre "${s.titre}"
+- Objectif de cette séance : ${s.objectif}
+- Activité prévue dans la progression : ${s.activite ?? ""}
+- Trace ou production prévue : ${s.traceOuProduction ?? ""}
 
 Construis un déroulement réaliste et directement utilisable par l'enseignant.
 Le cheminement général à adapter est :
@@ -161,6 +140,80 @@ Réponds uniquement avec un JSON valide, sans Markdown, au format suivant :
   "vigilance": "Point d'attention pour l'enseignant"
 }
 `;
+}
+
+export async function POST(request: Request) {
+  const body = (await request.json()) as GenerateLessonRequest;
+  const { aiProvider, aiApiKey, ...contexte } = body;
+
+  if (
+    !contexte.cycle ||
+    !contexte.niveau ||
+    !contexte.domaine ||
+    !contexte.sousDomaine ||
+    !contexte.item ||
+    !contexte.competence ||
+    !contexte.objectifSequence ||
+    !contexte.seance?.titre ||
+    !contexte.seance?.objectif
+  ) {
+    return NextResponse.json(
+      { error: "Les éléments de contexte, l'objectif et la séance choisie sont obligatoires." },
+      { status: 400 }
+    );
+  }
+
+  const prompt = buildPrompt(contexte);
+
+  function parseSeance(texte: string) {
+    const seance = extraireJson(texte);
+    if (!seanceValide(seance)) {
+      throw new Error("La séance générée est incomplète.");
+    }
+    return seance;
+  }
+
+  if (aiProvider && aiApiKey && aiProvider !== "none") {
+    try {
+      const texte = await callAiProvider({
+        provider: aiProvider as AiProvider,
+        apiKey: aiApiKey,
+        system: SYSTEM_PROMPT,
+        prompt,
+        maxTokens: 2200
+      });
+
+      const seance = parseSeance(texte);
+      return NextResponse.json({ seance });
+    } catch (error) {
+      return NextResponse.json(
+        {
+          error: error instanceof Error ? error.message : "Erreur lors de l'appel à l'IA.",
+          details: ""
+        },
+        { status: 500 }
+      );
+    }
+  }
+
+  if (aiProvider === "none") {
+    return NextResponse.json(
+      {
+        error:
+          "L'assistant IA n'est pas configuré. Rendez-vous dans les Paramètres pour choisir un fournisseur."
+      },
+      { status: 400 }
+    );
+  }
+
+  const apiKey = process.env.OPENAI_API_KEY;
+
+  if (!apiKey) {
+    return NextResponse.json(
+      { error: "Aucune IA configurée. Veuillez choisir un fournisseur IA dans les Paramètres." },
+      { status: 500 }
+    );
+  }
 
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
@@ -169,14 +222,11 @@ Réponds uniquement avec un JSON valide, sans Markdown, au format suivant :
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
-      model: process.env.OPENAI_MODEL ?? "gpt-5.4-mini",
-      instructions:
-        "Tu aides un enseignant à préparer des séances concrètes, progressives et adaptées au contexte de classe. Tu respectes strictement le format JSON demandé.",
-      input: promptSeance,
+      model: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
+      instructions: SYSTEM_PROMPT,
+      input: prompt,
       max_output_tokens: 2200,
-      reasoning: {
-        effort: "none"
-      }
+      reasoning: { effort: "none" }
     })
   });
 
@@ -192,12 +242,7 @@ Réponds uniquement avec un JSON valide, sans Markdown, au format suivant :
   const texte = extraireTexteOpenAI(data);
 
   try {
-    const seance = extraireJson(texte);
-
-    if (!seanceValide(seance)) {
-      throw new Error("La séance générée est incomplète.");
-    }
-
+    const seance = parseSeance(texte);
     return NextResponse.json({ seance });
   } catch (error) {
     return NextResponse.json(

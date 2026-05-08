@@ -146,31 +146,70 @@ function ajouterAuPlanning(seance: SeancePreparee) {
   writeUserData(PLANNING_STORAGE_KEY, [...tuilesExistantes, tuile]);
 }
 
-function imprimerFiche(ficheId: string) {
-  const contenu = document.getElementById(`fiche-${ficheId}`);
-  if (!contenu) {
-    return;
-  }
-
+function imprimerFiche(fiche: SeancePreparee) {
   const fenetre = window.open("", "_blank", "width=900,height=700");
-  if (!fenetre) {
-    return;
-  }
+  if (!fenetre) return;
 
-  fenetre.document.write(`
-    <html>
-      <head>
-        <title>Fiche de séance</title>
-        <style>
-          body { font-family: Arial, sans-serif; color: #0f172a; padding: 24px; line-height: 1.5; }
-          article, div { break-inside: avoid; }
-          .phase { border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; margin-top: 12px; }
-          h1, h2, h3, p { margin: 0 0 10px; }
-        </style>
-      </head>
-      <body>${contenu.innerHTML}</body>
-    </html>
-  `);
+  const e = (s: string) =>
+    s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+  const phasesHtml = (fiche.lesson.phases ?? [])
+    .map(
+      (phase, i) => `
+      <section class="phase">
+        <h2>Phase ${i + 1} — ${e(phase.titre)}</h2>
+        <p class="meta">${[phase.duree, phase.organisation].filter(Boolean).map(e).join(" · ")}</p>
+        ${phase.roleEnseignant ? `<h3>Rôle enseignant</h3><p>${e(phase.roleEnseignant)}</p>` : ""}
+        ${phase.consigne ? `<h3>Consigne</h3><p>${e(phase.consigne)}</p>` : ""}
+        ${phase.activiteEleves ? `<h3>Activité élèves</h3><p>${e(phase.activiteEleves)}</p>` : ""}
+        ${phase.materiel ? `<h3>Matériel</h3><p>${e(phase.materiel)}</p>` : ""}
+      </section>`
+    )
+    .join("");
+
+  const html = `<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>${e(fiche.lesson.titre)}</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 11pt;
+      line-height: 1.6;
+      color: #111;
+      padding: 2cm 2.5cm;
+    }
+    h1 { font-size: 18pt; font-weight: bold; margin-bottom: 4pt; }
+    h2 { font-size: 13pt; font-weight: bold; margin: 18pt 0 4pt; border-bottom: 1px solid #ccc; padding-bottom: 3pt; }
+    h3 { font-size: 10pt; font-weight: bold; text-transform: uppercase; letter-spacing: .04em; margin: 10pt 0 2pt; color: #444; }
+    p { margin-bottom: 6pt; white-space: pre-wrap; }
+    .subtitle { font-size: 10pt; color: #555; margin-bottom: 14pt; }
+    .meta { font-size: 9pt; color: #666; margin-bottom: 6pt; font-style: italic; }
+    .intro { margin-bottom: 16pt; padding-bottom: 12pt; border-bottom: 2px solid #111; }
+    .phase { margin-top: 12pt; break-inside: avoid; }
+    .section { margin-top: 14pt; break-inside: avoid; }
+    @page { margin: 0; }
+    @media print { body { padding: 1.5cm 2cm; } }
+  </style>
+</head>
+<body>
+  <div class="intro">
+    <h1>${e(fiche.lesson.titre)}</h1>
+    <p class="subtitle">
+      ${[fiche.sequenceTitle, `Séance ${fiche.seanceNumero}`, fiche.seancePhase, fiche.lesson.niveau, fiche.lesson.dureeTotale].filter(Boolean).map(e).join(" · ")}
+    </p>
+    ${fiche.lesson.objectif ? `<h3>Objectif</h3><p>${e(fiche.lesson.objectif)}</p>` : ""}
+    ${fiche.lesson.materielGlobal ? `<h3>Matériel</h3><p>${e(fiche.lesson.materielGlobal)}</p>` : ""}
+  </div>
+  ${phasesHtml}
+  ${fiche.lesson.traceEcrite ? `<div class="section"><h2>Trace écrite</h2><p>${e(fiche.lesson.traceEcrite)}</p></div>` : ""}
+  ${fiche.lesson.vigilance ? `<div class="section"><h2>Vigilance</h2><p>${e(fiche.lesson.vigilance)}</p></div>` : ""}
+</body>
+</html>`;
+
+  fenetre.document.write(html);
   fenetre.document.close();
   fenetre.focus();
   fenetre.print();
@@ -589,7 +628,7 @@ export default function BibliothequePage() {
                                                     style={{ borderColor: getDisciplineColor(sequence.domaine).border }}
                                                   >
                                                     <div className="flex flex-wrap items-start justify-between gap-3">
-                                                      <div>
+                                                      <div className="min-w-0 flex-1">
                                                         <label className="grid gap-1">
                                                           <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                                                             Séance {seance.numero}
@@ -679,7 +718,7 @@ export default function BibliothequePage() {
                                                               onClick={(event) => {
                                                                 event.preventDefault();
                                                                 event.stopPropagation();
-                                                                imprimerFiche(fiche.id);
+                                                                imprimerFiche(fiche);
                                                               }}
                                                               className="rounded-md bg-slate-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-slate-800"
                                                             >

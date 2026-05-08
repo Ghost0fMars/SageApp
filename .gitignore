@@ -9,3 +9,6 @@ yarn-error.log*
 pnpm-debug.log*
 .claude/
 tsconfig.tsbuildinfo
+
+# Electron build output
+dist-electron/

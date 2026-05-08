@@ -1,5 +1,6 @@
-﻿import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { callAiProvider, type AiProvider } from "../../lib/ai-provider";
 
 type Message = {
   role: "user" | "assistant";
@@ -7,6 +8,8 @@ type Message = {
 };
 
 type ChatRequest = {
+  aiProvider?: string;
+  aiApiKey?: string;
   messages: Message[];
   context: string;
 };
@@ -127,36 +130,8 @@ async function rechercherDocumentation(question: string, apiKey: string): Promis
   return (chunks as DocumentChunk[]).map((chunk) => chunk.content).join("\n\n---\n\n");
 }
 
-export async function POST(request: NextRequest) {
-  const apiKey = process.env.OPENAI_API_KEY;
-
-  if (!apiKey) {
-    return NextResponse.json(
-      { error: "La variable OPENAI_API_KEY est manquante dans .env.local." },
-      { status: 500 }
-    );
-  }
-
-  const auth = await verifierUtilisateur(request);
-  if ("error" in auth) {
-    return NextResponse.json({ error: auth.error }, { status: auth.status });
-  }
-
-  const { messages, context } = (await request.json()) as ChatRequest;
-
-  if (!Array.isArray(messages) || messages.length === 0) {
-    return NextResponse.json({ error: "Le message est obligatoire." }, { status: 400 });
-  }
-
-  const dernierMessage = messages[messages.length - 1]?.content?.trim() ?? "";
-
-  if (!dernierMessage) {
-    return NextResponse.json({ error: "Le message est vide." }, { status: 400 });
-  }
-
-  const docContext = await rechercherDocumentation(dernierMessage, apiKey).catch(() => "");
-
-  const instructions = `Tu es l'assistant pédagogique intégré à Sage, un outil pour les enseignants du primaire. Tu aides l'enseignant à :
+function buildSystemPrompt(context: string, docContext: string) {
+  return `Tu es l'assistant pédagogique intégré à Sage, un outil pour les enseignants du primaire. Tu aides l'enseignant à :
 - Rédiger des appréciations pour le livret scolaire (2-4 phrases, ton positif et constructif)
 - Identifier les élèves en difficulté ou en réussite selon les évaluations
 - Analyser les progressions par domaine ou par compétence
@@ -179,15 +154,90 @@ Consignes :
 - Ne mentionne jamais "Non évalué" dans une appréciation publique.
 - Pour les analyses, cite les données précises : niveaux d'acquisition, domaines, dates d'évaluation.
 - Si on te demande des appréciations pour plusieurs élèves, génère-les toutes dans un seul message en les séparant clairement.`;
+}
+
+export async function POST(request: NextRequest) {
+  const body = (await request.json()) as ChatRequest;
+  const { aiProvider, aiApiKey, messages, context } = body;
+
+  if (!Array.isArray(messages) || messages.length === 0) {
+    return NextResponse.json({ error: "Le message est obligatoire." }, { status: 400 });
+  }
+
+  const dernierMessage = messages[messages.length - 1]?.content?.trim() ?? "";
+
+  if (!dernierMessage) {
+    return NextResponse.json({ error: "Le message est vide." }, { status: 400 });
+  }
 
   const historique = messages
     .slice(0, -1)
     .map((message) => `${message.role === "user" ? "Enseignant" : "Assistant"} : ${message.content}`)
     .join("\n\n");
 
-  const input = historique
+  const userPrompt = historique
     ? `[Historique de la conversation]\n${historique}\n\n[Nouveau message]\nEnseignant : ${dernierMessage}`
     : dernierMessage;
+
+  if (aiProvider && aiApiKey && aiProvider !== "none") {
+    const docContext =
+      aiProvider === "openai"
+        ? await rechercherDocumentation(dernierMessage, aiApiKey).catch(() => "")
+        : "";
+
+    const instructions = buildSystemPrompt(context, docContext);
+
+    try {
+      const content = await callAiProvider({
+        provider: aiProvider as AiProvider,
+        apiKey: aiApiKey,
+        system: instructions,
+        prompt: userPrompt,
+        maxTokens: 2500
+      });
+
+      if (!content) {
+        return NextResponse.json(
+          { error: "L'IA n'a pas renvoyé de texte exploitable." },
+          { status: 502 }
+        );
+      }
+
+      return NextResponse.json({ content });
+    } catch (error) {
+      return NextResponse.json(
+        { error: error instanceof Error ? error.message : "Erreur lors de l'appel à l'IA." },
+        { status: 500 }
+      );
+    }
+  }
+
+  if (aiProvider === "none") {
+    return NextResponse.json(
+      {
+        error:
+          "L'assistant IA n'est pas configuré. Rendez-vous dans les Paramètres pour choisir un fournisseur."
+      },
+      { status: 400 }
+    );
+  }
+
+  const apiKey = process.env.OPENAI_API_KEY;
+
+  if (!apiKey) {
+    return NextResponse.json(
+      { error: "Aucune IA configurée. Veuillez choisir un fournisseur IA dans les Paramètres." },
+      { status: 500 }
+    );
+  }
+
+  const auth = await verifierUtilisateur(request);
+  if ("error" in auth) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
+
+  const docContext = await rechercherDocumentation(dernierMessage, apiKey).catch(() => "");
+  const instructions = buildSystemPrompt(context, docContext);
 
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
@@ -196,9 +246,9 @@ Consignes :
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
-      model: process.env.OPENAI_MODEL ?? "gpt-5.4-mini",
+      model: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
       instructions,
-      input,
+      input: userPrompt,
       max_output_tokens: 2500,
       reasoning: { effort: "none" }
     })

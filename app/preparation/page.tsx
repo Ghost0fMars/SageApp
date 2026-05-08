@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import referentielBrut from "../../Référentiel_de_compétences.json";
 import { readUserData, writeUserData } from "../lib/user-storage";
+import { readAiConfig } from "../lib/ai-config";
 
 // TypeScript décrit ici la forme d'une ligne du fichier JSON d'origine.
 type LigneReferentielBrute = {
@@ -311,6 +312,7 @@ export default function PageAccueil() {
     setObjectif("");
 
     try {
+      const aiConfig = readAiConfig();
       const response = await fetch("/api/generate-objective", {
         method: "POST",
         headers: {
@@ -319,7 +321,9 @@ export default function PageAccueil() {
         body: JSON.stringify({
           niveau: selection.niveau,
           domaine: selection.domaine,
-          competence: selection.competence
+          competence: selection.competence,
+          aiProvider: aiConfig?.provider,
+          aiApiKey: aiConfig?.apiKey
         })
       });
 
@@ -361,6 +365,7 @@ export default function PageAccueil() {
     setMessagePlanning("");
 
     try {
+      const aiConfig = readAiConfig();
       const response = await fetch("/api/generate-sequence", {
         method: "POST",
         headers: {
@@ -373,7 +378,9 @@ export default function PageAccueil() {
           sousDomaine: selection.sousDomaine,
           item: selection.item,
           competence: selection.competence,
-          objectif
+          objectif,
+          aiProvider: aiConfig?.provider,
+          aiApiKey: aiConfig?.apiKey
         })
       });
 
@@ -428,6 +435,7 @@ export default function PageAccueil() {
     setMessagePlanning("");
 
     try {
+      const aiConfig = readAiConfig();
       const response = await fetch("/api/generate-lesson", {
         method: "POST",
         headers: {
@@ -441,7 +449,9 @@ export default function PageAccueil() {
           item: selection.item,
           competence: selection.competence,
           objectifSequence: objectif,
-          seance
+          seance,
+          aiProvider: aiConfig?.provider,
+          aiApiKey: aiConfig?.apiKey
         })
       });
 
