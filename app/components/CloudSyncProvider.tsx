@@ -90,25 +90,9 @@ export default function CloudSyncProvider({ children }: { children: React.ReactN
           localStorage.setItem(userStorageKeyForUser(user.id, ligne.key), JSON.stringify(ligne.value));
         });
       } else {
-        const donneesLocales = SYNCED_DATA_KEYS.flatMap((key) => {
-          const valeur = localStorage.getItem(userStorageKeyForUser(user.id, key));
-          return valeur
-            ? [
-                {
-                  user_id: user.id,
-                  key,
-                  value: JSON.parse(valeur),
-                  updated_at: new Date().toISOString()
-                }
-              ]
-            : [];
+        SYNCED_DATA_KEYS.forEach((key) => {
+          localStorage.removeItem(userStorageKeyForUser(user.id, key));
         });
-
-        if (donneesLocales.length > 0) {
-          await client.from("app_data").upsert(donneesLocales, {
-            onConflict: "user_id,key"
-          });
-        }
       }
 
       if (mounted) {

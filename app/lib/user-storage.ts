@@ -75,35 +75,10 @@ function storageKeyForUser(userId: string, key: string) {
   return `sage:${userId}:${key}`;
 }
 
-function migrateLocalDataToUser(userId: string) {
-  const previousUserId = localStorage.getItem(CURRENT_USER_KEY) ?? DEFAULT_USER.id;
-
-  if (previousUserId === userId) {
-    return;
-  }
-
-  SYNCED_DATA_KEYS.forEach((key) => {
-    const destinationKey = storageKeyForUser(userId, key);
-
-    if (localStorage.getItem(destinationKey)) {
-      return;
-    }
-
-    const previousScopedValue = localStorage.getItem(storageKeyForUser(previousUserId, key));
-    const legacyValue = localStorage.getItem(key);
-    const valueToCopy = previousScopedValue ?? legacyValue;
-
-    if (valueToCopy) {
-      localStorage.setItem(destinationKey, valueToCopy);
-    }
-  });
-}
 
 export function ensureLocalUser(user: LocalUser) {
   const users = readUsers();
   const existingUser = users.find((storedUser) => storedUser.id === user.id);
-
-  migrateLocalDataToUser(user.id);
 
   if (existingUser) {
     localStorage.setItem(
