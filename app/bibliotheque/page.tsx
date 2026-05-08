@@ -136,6 +136,10 @@ function imprimerFiche(fiche: SeancePreparee) {
   const e = (s: string) =>
     s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
+  const date = new Date().toLocaleDateString("fr-FR", {
+    day: "numeric", month: "long", year: "numeric"
+  });
+
   const phasesHtml = (fiche.lesson.phases ?? [])
     .map(
       (phase, i) => `
@@ -160,28 +164,40 @@ function imprimerFiche(fiche: SeancePreparee) {
   <title>${e(fiche.lesson.titre)}</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: Georgia, "Times New Roman", serif; font-size: 11pt; line-height: 1.6; color: #111; padding: 2cm 2.5cm; }
-    h1 { font-size: 18pt; font-weight: bold; margin-bottom: 4pt; }
-    h2 { font-size: 13pt; font-weight: bold; margin: 18pt 0 4pt; border-bottom: 1px solid #ccc; padding-bottom: 3pt; }
-    h3 { font-size: 10pt; font-weight: bold; text-transform: uppercase; letter-spacing: .04em; margin: 10pt 0 2pt; color: #444; }
+    body { font-family: Georgia, serif; font-size: 11pt; line-height: 1.6; color: #111; padding: 1.8cm 2.5cm 2cm; }
+    h1 { font-size: 20pt; font-weight: bold; margin-bottom: 5pt; }
+    h2 { font-size: 13pt; font-weight: bold; margin: 18pt 0 4pt; border-bottom: 1px solid #d1d5db; padding-bottom: 3pt; }
+    h3 { font-size: 9pt; font-weight: bold; text-transform: uppercase; letter-spacing: .07em; margin: 10pt 0 2pt; color: #555; }
     p { margin-bottom: 6pt; white-space: pre-wrap; }
-    ul { margin: 4pt 0 6pt 1.2em; }
+    ul { margin: 4pt 0 6pt 1.4em; }
     li { margin-bottom: 2pt; }
-    .subtitle { font-size: 10pt; color: #555; margin-bottom: 14pt; }
-    .meta { font-size: 9pt; color: #666; margin-bottom: 6pt; font-style: italic; }
-    .intro { margin-bottom: 16pt; padding-bottom: 12pt; border-bottom: 2px solid #111; }
-    .phase { margin-top: 12pt; break-inside: avoid; }
+    .label { font-size: 8pt; font-weight: bold; letter-spacing: .18em; text-transform: uppercase; color: #9ca3af; margin-bottom: 6pt; }
+    .subtitle { font-size: 10pt; color: #6b7280; margin-bottom: 12pt; }
+    .meta { font-size: 9pt; color: #6b7280; margin-bottom: 6pt; font-style: italic; }
+    .intro { margin-bottom: 18pt; padding-bottom: 14pt; border-bottom: 2px solid #111; }
+    .phase { margin-top: 14pt; break-inside: avoid; }
     .section { margin-top: 14pt; break-inside: avoid; }
-    @page { margin: 0; }
-    @media print { body { padding: 1.5cm 2cm; } }
+    .doc-header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 7pt; margin-bottom: 18pt; border-bottom: 1px solid #e5e7eb; }
+    .doc-brand { font-size: 8pt; font-weight: bold; letter-spacing: .25em; text-transform: uppercase; color: #d1d5db; }
+    .doc-date { font-size: 8pt; color: #9ca3af; }
+    @page {
+      size: A4;
+      margin: 2cm 2.5cm 2.5cm;
+      @bottom-center { content: "— " counter(page) " —"; font-family: Georgia, serif; font-size: 8pt; color: #9ca3af; }
+      @bottom-right { content: "SAGE"; font-family: Georgia, serif; font-size: 7pt; letter-spacing: .2em; text-transform: uppercase; color: #d1d5db; }
+    }
+    @media print { body { padding: 0; } }
   </style>
 </head>
 <body>
+  <div class="doc-header">
+    <span class="doc-brand">SAGE</span>
+    <span class="doc-date">${date}</span>
+  </div>
   <div class="intro">
+    <p class="label">Fiche de séance</p>
     <h1>${e(fiche.lesson.titre)}</h1>
-    <p class="subtitle">
-      ${[fiche.sequenceTitle, `Séance ${fiche.seanceNumero}`, fiche.seanceType, fiche.lesson.niveau, `${fiche.lesson.duree_minutes} min`].filter(Boolean).map(e).join(" · ")}
-    </p>
+    <p class="subtitle">${[fiche.sequenceTitle, `Séance ${fiche.seanceNumero}`, fiche.seanceType, fiche.lesson.niveau, `${fiche.lesson.duree_minutes} min`].filter(Boolean).map(e).join(" · ")}</p>
     ${fiche.lesson.objectif ? `<h3>Objectif</h3><p>${e(fiche.lesson.objectif)}</p>` : ""}
     ${fiche.lesson.materiel?.length ? `<h3>Matériel</h3><p>${fiche.lesson.materiel.map(e).join(", ")}</p>` : ""}
   </div>
