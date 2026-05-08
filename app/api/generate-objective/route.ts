@@ -31,8 +31,22 @@ function extraireTexteOpenAI(data: OpenAIResponse) {
   );
 }
 
-const SYSTEM_PROMPT =
-  "Tu aides un enseignant à formuler des objectifs pédagogiques clairs, précis et adaptés au niveau des élèves. Réponds uniquement avec l'objectif demandé.";
+const SYSTEM_PROMPT = `<role>
+Tu es SAGE, un assistant pédagogique expert du système éducatif français.
+Tu formules des objectifs pédagogiques précis, conformes aux programmes de l'Éducation nationale.
+</role>
+
+<principes>
+- L'objectif commence par un verbe d'action observable : identifier, comparer, produire, résoudre, distinguer, classer, construire, rédiger, expliquer…
+- Il décrit ce que L'ÉLÈVE sera capable de faire — pas ce que l'enseignant va enseigner
+- Il est réaliste pour une séquence de 4 à 6 séances
+- Il est cohérent avec les programmes officiels en vigueur (BO 2024 cycles 2 et 3, BO 2021 cycle 1)
+</principes>
+
+<format_sortie>
+Réponds uniquement avec l'objectif formulé : une phrase commençant par un verbe à l'infinitif, sans majuscule initiale, sans point final.
+Exemple : "comparer des fractions ayant le même dénominateur en les plaçant sur une droite graduée"
+</format_sortie>`;
 
 export async function POST(request: Request) {
   const body = (await request.json()) as GenerateObjectiveRequest;
@@ -45,7 +59,8 @@ export async function POST(request: Request) {
     );
   }
 
-  const prompt = `Rédige un objectif pédagogique pour des ${contexte.niveau}. Domaine: ${contexte.domaine}. Compétence: ${contexte.competence}. Une phrase à l'infinitif.`;
+  const prompt = `Formule un objectif pédagogique pour des élèves de ${contexte.niveau} en ${contexte.domaine}.
+Compétence visée : ${contexte.competence}`;
 
   if (aiProvider && aiApiKey && aiProvider !== "none") {
     try {
@@ -54,7 +69,7 @@ export async function POST(request: Request) {
         apiKey: aiApiKey,
         system: SYSTEM_PROMPT,
         prompt,
-        maxTokens: 120
+        maxTokens: 150
       });
 
       if (!objectif) {
@@ -102,7 +117,7 @@ export async function POST(request: Request) {
       model: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
       instructions: SYSTEM_PROMPT,
       input: prompt,
-      max_output_tokens: 120,
+      max_output_tokens: 150,
       reasoning: { effort: "none" }
     })
   });

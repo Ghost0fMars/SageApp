@@ -4,13 +4,43 @@ import { useEffect, useMemo, useState } from "react";
 import { getDisciplineColor } from "../lib/discipline-colors";
 import { readUserData, writeUserData } from "../lib/user-storage";
 
-type PhaseSeanceDetaillee = {
+type Beat = {
+  amorce: string;
+  recherche: string;
+  mise_en_commun: string;
+  institutionnalisation: string | null;
+  entrainement: string;
+};
+
+type SeanceProgression = {
+  numero: number;
+  type: string;
   titre: string;
-  duree: string;
-  organisation: string;
-  roleEnseignant: string;
+  est_seance_cloture?: boolean;
+  duree_minutes?: number;
+  beat?: Beat;
+  tension_ouverte?: string | null;
+  materiel?: string[];
+  differenciation?: { soutien?: string; approfondissement?: string };
+};
+
+type Sequence = {
+  titre: string;
+  intention: string;
+  regime?: string;
+  seances: SeanceProgression[];
+};
+
+type PhaseSeanceDetaillee = {
+  nom: string;
+  duree_minutes: number;
+  disposition_classe: string;
+  role_enseignant: string;
   consigne: string;
-  activiteEleves: string;
+  role_eleves: string;
+  hors_champ?: string | null;
+  erreurs_anticipees?: string[];
+  relances?: string[];
   materiel: string;
 };
 
@@ -18,26 +48,11 @@ type SeanceDetaillee = {
   titre: string;
   objectif: string;
   niveau: string;
-  dureeTotale: string;
-  materielGlobal: string;
+  duree_minutes: number;
+  materiel: string[];
   phases?: PhaseSeanceDetaillee[];
-  traceEcrite?: string;
+  trace_ecrite?: string;
   vigilance?: string;
-};
-
-type SeanceProgression = {
-  numero: number;
-  phase: string;
-  titre: string;
-  objectif: string;
-  activite?: string;
-  traceOuProduction?: string;
-};
-
-type Sequence = {
-  titre: string;
-  intention: string;
-  seances: SeanceProgression[];
 };
 
 type SequencePreparee = {
@@ -65,7 +80,7 @@ type SeancePreparee = {
   sequenceTitle: string;
   sequenceTotal: number;
   seanceNumero: number;
-  seancePhase: string;
+  seanceType: string;
   lesson: SeanceDetaillee;
 };
 
@@ -89,15 +104,6 @@ type DossierSequences = Record<
 const PREPARED_LESSONS_STORAGE_KEY = "sage-prepared-lessons";
 const PLANNING_STORAGE_KEY = "sage-planning-tiles";
 const SEQUENCES_STORAGE_KEY = "sage-sequences";
-
-function lireDureeEnMinutes(duree: string) {
-  const heures = duree.match(/(\d+)\s*h/i);
-  const minutes = duree.match(/(\d+)\s*min/i);
-  const totalHeures = heures ? Number(heures[1]) * 60 : 0;
-  const totalMinutes = minutes ? Number(minutes[1]) : 0;
-  const total = totalHeures + totalMinutes;
-  return total > 0 ? total : 55;
-}
 
 function cleSeance(sequence: SequencePreparee, numero: number) {
   return [
@@ -139,7 +145,7 @@ function ajouterAuPlanning(seance: SeancePreparee) {
     titreSequence: seance.sequenceTitle,
     seanceLabel: `${seance.seanceNumero}/${seance.sequenceTotal}`,
     domaine: seance.domaine,
-    dureeMinutes: lireDureeEnMinutes(seance.lesson.dureeTotale),
+    dureeMinutes: seance.lesson.duree_minutes,
     lesson: seance.lesson
   };
 
@@ -157,11 +163,14 @@ function imprimerFiche(fiche: SeancePreparee) {
     .map(
       (phase, i) => `
       <section class="phase">
-        <h2>Phase ${i + 1} — ${e(phase.titre)}</h2>
-        <p class="meta">${[phase.duree, phase.organisation].filter(Boolean).map(e).join(" · ")}</p>
-        ${phase.roleEnseignant ? `<h3>Rôle enseignant</h3><p>${e(phase.roleEnseignant)}</p>` : ""}
+        <h2>Phase ${i + 1} — ${e(phase.nom)}</h2>
+        <p class="meta">${[`${phase.duree_minutes} min`, phase.disposition_classe].filter(Boolean).map(e).join(" · ")}</p>
+        ${phase.role_enseignant ? `<h3>Rôle enseignant</h3><p>${e(phase.role_enseignant)}</p>` : ""}
         ${phase.consigne ? `<h3>Consigne</h3><p>${e(phase.consigne)}</p>` : ""}
-        ${phase.activiteEleves ? `<h3>Activité élèves</h3><p>${e(phase.activiteEleves)}</p>` : ""}
+        ${phase.role_eleves ? `<h3>Activité élèves</h3><p>${e(phase.role_eleves)}</p>` : ""}
+        ${phase.hors_champ ? `<h3>Hors-champ</h3><p>${e(phase.hors_champ)}</p>` : ""}
+        ${phase.erreurs_anticipees?.length ? `<h3>Erreurs anticipées</h3><ul>${phase.erreurs_anticipees.map((err) => `<li>${e(err)}</li>`).join("")}</ul>` : ""}
+        ${phase.relances?.length ? `<h3>Relances</h3><ul>${phase.relances.map((r) => `<li>${e(r)}</li>`).join("")}</ul>` : ""}
         ${phase.materiel ? `<h3>Matériel</h3><p>${e(phase.materiel)}</p>` : ""}
       </section>`
     )
@@ -174,17 +183,13 @@ function imprimerFiche(fiche: SeancePreparee) {
   <title>${e(fiche.lesson.titre)}</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: Georgia, "Times New Roman", serif;
-      font-size: 11pt;
-      line-height: 1.6;
-      color: #111;
-      padding: 2cm 2.5cm;
-    }
+    body { font-family: Georgia, "Times New Roman", serif; font-size: 11pt; line-height: 1.6; color: #111; padding: 2cm 2.5cm; }
     h1 { font-size: 18pt; font-weight: bold; margin-bottom: 4pt; }
     h2 { font-size: 13pt; font-weight: bold; margin: 18pt 0 4pt; border-bottom: 1px solid #ccc; padding-bottom: 3pt; }
     h3 { font-size: 10pt; font-weight: bold; text-transform: uppercase; letter-spacing: .04em; margin: 10pt 0 2pt; color: #444; }
     p { margin-bottom: 6pt; white-space: pre-wrap; }
+    ul { margin: 4pt 0 6pt 1.2em; }
+    li { margin-bottom: 2pt; }
     .subtitle { font-size: 10pt; color: #555; margin-bottom: 14pt; }
     .meta { font-size: 9pt; color: #666; margin-bottom: 6pt; font-style: italic; }
     .intro { margin-bottom: 16pt; padding-bottom: 12pt; border-bottom: 2px solid #111; }
@@ -198,13 +203,13 @@ function imprimerFiche(fiche: SeancePreparee) {
   <div class="intro">
     <h1>${e(fiche.lesson.titre)}</h1>
     <p class="subtitle">
-      ${[fiche.sequenceTitle, `Séance ${fiche.seanceNumero}`, fiche.seancePhase, fiche.lesson.niveau, fiche.lesson.dureeTotale].filter(Boolean).map(e).join(" · ")}
+      ${[fiche.sequenceTitle, `Séance ${fiche.seanceNumero}`, fiche.seanceType, fiche.lesson.niveau, `${fiche.lesson.duree_minutes} min`].filter(Boolean).map(e).join(" · ")}
     </p>
     ${fiche.lesson.objectif ? `<h3>Objectif</h3><p>${e(fiche.lesson.objectif)}</p>` : ""}
-    ${fiche.lesson.materielGlobal ? `<h3>Matériel</h3><p>${e(fiche.lesson.materielGlobal)}</p>` : ""}
+    ${fiche.lesson.materiel?.length ? `<h3>Matériel</h3><p>${fiche.lesson.materiel.map(e).join(", ")}</p>` : ""}
   </div>
   ${phasesHtml}
-  ${fiche.lesson.traceEcrite ? `<div class="section"><h2>Trace écrite</h2><p>${e(fiche.lesson.traceEcrite)}</p></div>` : ""}
+  ${fiche.lesson.trace_ecrite ? `<div class="section"><h2>Trace écrite</h2><p>${e(fiche.lesson.trace_ecrite)}</p></div>` : ""}
   ${fiche.lesson.vigilance ? `<div class="section"><h2>Vigilance</h2><p>${e(fiche.lesson.vigilance)}</p></div>` : ""}
 </body>
 </html>`;
@@ -228,11 +233,7 @@ export default function BibliothequePage() {
         readUserData<SequencePreparee[]>(SEQUENCES_STORAGE_KEY, [], SEQUENCES_STORAGE_KEY)
       );
       setFiches(
-        readUserData<SeancePreparee[]>(
-          PREPARED_LESSONS_STORAGE_KEY,
-          [],
-          PREPARED_LESSONS_STORAGE_KEY
-        )
+        readUserData<SeancePreparee[]>(PREPARED_LESSONS_STORAGE_KEY, [], PREPARED_LESSONS_STORAGE_KEY)
       );
       setTuilesPlanning(
         readUserData<TuilePlanning[]>(PLANNING_STORAGE_KEY, [], PLANNING_STORAGE_KEY)
@@ -242,7 +243,6 @@ export default function BibliothequePage() {
     chargerDonnees();
     window.addEventListener("focus", chargerDonnees);
     document.addEventListener("visibilitychange", chargerDonnees);
-
     return () => {
       window.removeEventListener("focus", chargerDonnees);
       document.removeEventListener("visibilitychange", chargerDonnees);
@@ -268,9 +268,7 @@ export default function BibliothequePage() {
     try {
       const response = await fetch("/api/generate-lesson", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           cycle: sequence.cycle,
           niveau: sequence.niveau,
@@ -301,7 +299,7 @@ export default function BibliothequePage() {
         sequenceTitle: sequence.sequence.titre,
         sequenceTotal: sequence.sequence.seances.length,
         seanceNumero: seance.numero,
-        seancePhase: seance.phase,
+        seanceType: seance.type,
         lesson: data.seance
       };
 
@@ -317,10 +315,7 @@ export default function BibliothequePage() {
   }
 
   function renvoyerEnReserve(seance: SeancePreparee) {
-    if (tuilesPlanning.some((tuile) => tuile.preparedLessonId === seance.id)) {
-      return;
-    }
-
+    if (tuilesPlanning.some((tuile) => tuile.preparedLessonId === seance.id)) return;
     ajouterAuPlanning(seance);
     setTuilesPlanning(readUserData<TuilePlanning[]>(PLANNING_STORAGE_KEY, [], PLANNING_STORAGE_KEY));
     setMessage(
@@ -332,8 +327,8 @@ export default function BibliothequePage() {
     sequenceOriginale: SequencePreparee,
     prochaineSequence: Sequence
   ) {
-    const prochainesSequences = sequences.map((sequence) =>
-      sequence.id === sequenceOriginale.id ? { ...sequence, sequence: prochaineSequence } : sequence
+    const prochainesSequences = sequences.map((s) =>
+      s.id === sequenceOriginale.id ? { ...s, sequence: prochaineSequence } : s
     );
     const prochainesFiches = fiches.map((fiche) =>
       fiche.cycle === sequenceOriginale.cycle &&
@@ -346,7 +341,9 @@ export default function BibliothequePage() {
     );
     const prochainesTuiles = tuilesPlanning.map((tuile) =>
       prochainesFiches.some(
-        (fiche) => fiche.id === tuile.preparedLessonId && fiche.sequenceTitle === prochaineSequence.titre
+        (fiche) =>
+          fiche.id === tuile.preparedLessonId &&
+          fiche.sequenceTitle === prochaineSequence.titre
       )
         ? { ...tuile, titreSequence: prochaineSequence.titre }
         : tuile
@@ -374,14 +371,16 @@ export default function BibliothequePage() {
   }
 
   function modifierFicheSauvegardee(ficheId: string, prochaineFiche: SeancePreparee) {
-    const prochainesFiches = fiches.map((fiche) => (fiche.id === ficheId ? prochaineFiche : fiche));
+    const prochainesFiches = fiches.map((fiche) =>
+      fiche.id === ficheId ? prochaineFiche : fiche
+    );
     const prochainesTuiles = tuilesPlanning.map((tuile) =>
       tuile.preparedLessonId === ficheId
         ? {
             ...tuile,
             titreSequence: prochaineFiche.sequenceTitle,
             domaine: prochaineFiche.domaine,
-            dureeMinutes: lireDureeEnMinutes(prochaineFiche.lesson.dureeTotale),
+            dureeMinutes: prochaineFiche.lesson.duree_minutes,
             lesson: prochaineFiche.lesson
           }
         : tuile
@@ -409,14 +408,12 @@ export default function BibliothequePage() {
       )
     });
   }
+
   function supprimerSequence(sequence: SequencePreparee) {
     const confirmation = window.confirm(
       `Supprimer la séquence "${sequence.sequence.titre}" et ses fiches de séances associées ?`
     );
-
-    if (!confirmation) {
-      return;
-    }
+    if (!confirmation) return;
 
     const prochainesSequences = sequences.filter((item) => item.id !== sequence.id);
     const prochainesFiches = fiches.filter(
@@ -452,22 +449,13 @@ export default function BibliothequePage() {
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
-            <a
-              href="/"
-              className="rounded-md border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-900 shadow-sm transition hover:bg-slate-100"
-            >
+            <a href="/" className="rounded-md border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-900 shadow-sm transition hover:bg-slate-100">
               Tableau de bord
             </a>
-            <a
-              href="/preparation"
-              className="rounded-md border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-900 shadow-sm transition hover:bg-slate-100"
-            >
+            <a href="/preparation" className="rounded-md border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-900 shadow-sm transition hover:bg-slate-100">
               Préparer une séance
             </a>
-            <a
-              href="/planning"
-              className="rounded-md bg-slate-900 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800"
-            >
+            <a href="/planning" className="rounded-md bg-slate-900 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800">
               Ouvrir le planning
             </a>
           </div>
@@ -488,424 +476,406 @@ export default function BibliothequePage() {
         <div className="grid gap-4">
           {Object.entries(dossiers).map(([cycle, niveaux]) => (
             <details key={cycle} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-              <summary className="cursor-pointer text-xl font-bold text-slate-950">
-                {cycle}
-              </summary>
+              <summary className="cursor-pointer text-xl font-bold text-slate-950">{cycle}</summary>
 
               <div className="mt-4 grid gap-3 pl-4">
                 {Object.entries(niveaux).map(([niveau, domaines]) => (
                   <details key={niveau} className="rounded-md bg-slate-50 p-3">
-                    <summary className="cursor-pointer font-semibold text-slate-950">
-                      {niveau}
-                    </summary>
+                    <summary className="cursor-pointer font-semibold text-slate-950">{niveau}</summary>
 
                     <div className="mt-3 grid gap-3 pl-4">
                       {Object.entries(domaines).map(([domaine, sousDomaines]) => {
-                        const couleurDomaine = getDisciplineColor(domaine);
-
+                        const couleur = getDisciplineColor(domaine);
                         return (
-                        <details
-                          key={domaine}
-                          className="rounded-md border border-l-[6px] p-3"
-                          style={{
-                            backgroundColor: couleurDomaine.softBackground,
-                            borderColor: couleurDomaine.border,
-                            color: couleurDomaine.text
-                          }}
-                        >
-                          <summary className="cursor-pointer font-semibold">
-                            {domaine}
-                          </summary>
+                          <details
+                            key={domaine}
+                            className="rounded-md border border-l-[6px] p-3"
+                            style={{ backgroundColor: couleur.softBackground, borderColor: couleur.border, color: couleur.text }}
+                          >
+                            <summary className="cursor-pointer font-semibold">{domaine}</summary>
 
-                          <div className="mt-3 grid gap-3 pl-4">
-                            {Object.entries(sousDomaines).map(([sousDomaine, listeSequences]) => (
-                              <details
-                                key={sousDomaine}
-                                className="rounded-md border bg-white/70 p-3"
-                                style={{ borderColor: getDisciplineColor(domaine).border }}
-                              >
-                                <summary className="cursor-pointer font-semibold">
-                                  {sousDomaine}
-                                </summary>
+                            <div className="mt-3 grid gap-3 pl-4">
+                              {Object.entries(sousDomaines).map(([sousDomaine, listeSequences]) => (
+                                <details
+                                  key={sousDomaine}
+                                  className="rounded-md border bg-white/70 p-3"
+                                  style={{ borderColor: getDisciplineColor(domaine).border }}
+                                >
+                                  <summary className="cursor-pointer font-semibold">{sousDomaine}</summary>
 
-                                <div className="mt-3 grid gap-3 pl-4">
-                                  {listeSequences.map((sequence) => (
-                                    <details
-                                      key={sequence.id}
-                                      className="rounded-md border bg-white p-4"
-                                      style={{ borderColor: getDisciplineColor(sequence.domaine).border }}
-                                    >
-                                      <summary className="grid cursor-pointer grid-cols-[1fr_auto] items-center gap-3">
-                                        <span>
-                                          <span className="font-semibold text-slate-950">
-                                            Séquence · {sequence.sequence.titre}
+                                  <div className="mt-3 grid gap-3 pl-4">
+                                    {listeSequences.map((sequence) => (
+                                      <details
+                                        key={sequence.id}
+                                        className="rounded-md border bg-white p-4"
+                                        style={{ borderColor: getDisciplineColor(sequence.domaine).border }}
+                                      >
+                                        <summary className="grid cursor-pointer grid-cols-[1fr_auto] items-center gap-3">
+                                          <span>
+                                            <span className="font-semibold text-slate-950">
+                                              Séquence · {sequence.sequence.titre}
+                                            </span>
+                                            <span className="ml-2 text-sm text-slate-500">
+                                              {sequence.sequence.seances.length} séance(s)
+                                              {sequence.sequence.regime && (
+                                                <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">
+                                                  {sequence.sequence.regime}
+                                                </span>
+                                              )}
+                                            </span>
                                           </span>
-                                          <span className="ml-2 text-sm text-slate-500">
-                                            {sequence.sequence.seances.length} séance(s)
-                                          </span>
-                                        </span>
-                                        <button
-                                          type="button"
-                                          onClick={(event) => {
-                                            event.preventDefault();
-                                            event.stopPropagation();
-                                            supprimerSequence(sequence);
-                                          }}
-                                          className="rounded-md bg-red-700 px-3 py-2 text-xs font-semibold text-white transition hover:bg-red-800"
-                                        >
-                                          Supprimer
-                                        </button>
-                                      </summary>
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.preventDefault();
+                                              e.stopPropagation();
+                                              supprimerSequence(sequence);
+                                            }}
+                                            className="rounded-md bg-red-700 px-3 py-2 text-xs font-semibold text-white transition hover:bg-red-800"
+                                          >
+                                            Supprimer
+                                          </button>
+                                        </summary>
 
-                                      <div className="mt-4 grid gap-3">
-                                        <label className="grid gap-2">
-                                          <span className="text-sm font-semibold text-slate-700">
-                                            Titre de la séquence
-                                          </span>
-                                          <input
-                                            value={sequence.sequence.titre}
-                                            onChange={(event) =>
-                                              modifierSequenceSauvegardee(sequence, {
-                                                ...sequence.sequence,
-                                                titre: event.target.value
-                                              })
-                                            }
-                                            className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 font-semibold text-slate-950 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
-                                          />
-                                        </label>
-                                        <label className="grid gap-2 text-sm leading-6 text-slate-700">
-                                          <span className="font-semibold text-slate-950">
-                                            Intention générale
-                                          </span>
-                                          <textarea
-                                            value={sequence.sequence.intention}
-                                            onChange={(event) =>
-                                              modifierSequenceSauvegardee(sequence, {
-                                                ...sequence.sequence,
-                                                intention: event.target.value
-                                              })
-                                            }
-                                            className="min-h-20 w-full rounded-md border border-slate-300 bg-white px-3 py-2 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
-                                          />
-                                        </label>
-                                        <p className="mt-2 text-sm leading-6 text-slate-700">
-                                          <span className="font-semibold text-slate-950">
-                                            Objectif :
-                                          </span>{" "}
-                                          {sequence.objectif}
-                                        </p>
+                                        <div className="mt-4 grid gap-3">
+                                          <label className="grid gap-2">
+                                            <span className="text-sm font-semibold text-slate-700">
+                                              Titre de la séquence
+                                            </span>
+                                            <input
+                                              value={sequence.sequence.titre}
+                                              onChange={(e) =>
+                                                modifierSequenceSauvegardee(sequence, {
+                                                  ...sequence.sequence,
+                                                  titre: e.target.value
+                                                })
+                                              }
+                                              className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 font-semibold text-slate-950 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
+                                            />
+                                          </label>
+                                          <label className="grid gap-2 text-sm leading-6 text-slate-700">
+                                            <span className="font-semibold text-slate-950">
+                                              Intention générale
+                                            </span>
+                                            <textarea
+                                              value={sequence.sequence.intention}
+                                              onChange={(e) =>
+                                                modifierSequenceSauvegardee(sequence, {
+                                                  ...sequence.sequence,
+                                                  intention: e.target.value
+                                                })
+                                              }
+                                              className="min-h-20 w-full rounded-md border border-slate-300 bg-white px-3 py-2 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
+                                            />
+                                          </label>
+                                          <p className="mt-2 text-sm leading-6 text-slate-700">
+                                            <span className="font-semibold text-slate-950">Objectif :</span>{" "}
+                                            {sequence.objectif}
+                                          </p>
 
-                                        <details
-                                          className="mt-4 rounded-md border p-3"
-                                          style={{
-                                            backgroundColor: getDisciplineColor(sequence.domaine).softBackground,
-                                            borderColor: getDisciplineColor(sequence.domaine).border,
-                                            color: getDisciplineColor(sequence.domaine).text
-                                          }}
-                                          open
-                                        >
-                                          <summary className="cursor-pointer text-sm font-semibold text-teal-700">
-                                            Voir la progression
-                                          </summary>
+                                          <details
+                                            className="mt-4 rounded-md border p-3"
+                                            style={{
+                                              backgroundColor: getDisciplineColor(sequence.domaine).softBackground,
+                                              borderColor: getDisciplineColor(sequence.domaine).border,
+                                              color: getDisciplineColor(sequence.domaine).text
+                                            }}
+                                            open
+                                          >
+                                            <summary className="cursor-pointer text-sm font-semibold text-teal-700">
+                                              Voir la progression
+                                            </summary>
 
-                                          <div className="mt-3 grid gap-3">
-                                            {sequence.sequence.seances
-                                              .sort((a, b) => a.numero - b.numero)
-                                              .map((seance) => {
-                                                const fiche = trouverFiche(fiches, sequence, seance);
-                                                const idPreparation = cleSeance(sequence, seance.numero);
-                                                const estReservee =
-                                                  !!fiche &&
-                                                  tuilesPlanning.some(
-                                                    (tuile) =>
-                                                      tuile.preparedLessonId === fiche.id
-                                                  );
+                                            <div className="mt-3 grid gap-3">
+                                              {sequence.sequence.seances
+                                                .sort((a, b) => a.numero - b.numero)
+                                                .map((seance) => {
+                                                  const fiche = trouverFiche(fiches, sequence, seance);
+                                                  const idPreparation = cleSeance(sequence, seance.numero);
+                                                  const estReservee =
+                                                    !!fiche &&
+                                                    tuilesPlanning.some(
+                                                      (tuile) => tuile.preparedLessonId === fiche.id
+                                                    );
 
-                                                return (
-                                                  <article
-                                                    key={`${sequence.id}-${seance.numero}`}
-                                                    className="rounded-md border bg-white p-4"
-                                                    style={{ borderColor: getDisciplineColor(sequence.domaine).border }}
-                                                  >
-                                                    <div className="flex flex-wrap items-start justify-between gap-3">
-                                                      <div className="min-w-0 flex-1">
-                                                        <label className="grid gap-1">
-                                                          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                                                            Séance {seance.numero}
-                                                          </span>
-                                                          <input
-                                                            value={seance.titre}
-                                                            onChange={(event) =>
-                                                              modifierSeanceProgressionSauvegardee(
-                                                                sequence,
-                                                                seance.numero,
-                                                                { titre: event.target.value }
-                                                              )
-                                                            }
-                                                            className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 font-semibold text-slate-950 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
-                                                          />
-                                                        </label>
-                                                        <p className="mt-1 text-sm font-medium uppercase tracking-wide text-slate-500">
-                                                          {seance.phase}
-                                                        </p>
+                                                  return (
+                                                    <article
+                                                      key={`${sequence.id}-${seance.numero}`}
+                                                      className="rounded-md border bg-white p-4"
+                                                      style={{ borderColor: getDisciplineColor(sequence.domaine).border }}
+                                                    >
+                                                      <div className="flex flex-wrap items-start justify-between gap-3">
+                                                        <div className="min-w-0 flex-1">
+                                                          <label className="grid gap-1">
+                                                            <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                                              Séance {seance.numero}
+                                                            </span>
+                                                            <input
+                                                              value={seance.titre}
+                                                              onChange={(e) =>
+                                                                modifierSeanceProgressionSauvegardee(
+                                                                  sequence,
+                                                                  seance.numero,
+                                                                  { titre: e.target.value }
+                                                                )
+                                                              }
+                                                              className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 font-semibold text-slate-950 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
+                                                            />
+                                                          </label>
+                                                          <p className="mt-1 text-sm font-medium uppercase tracking-wide text-slate-500">
+                                                            {seance.type}
+                                                            {seance.duree_minutes ? ` · ${seance.duree_minutes} min` : ""}
+                                                          </p>
+                                                        </div>
+                                                        {fiche ? (
+                                                          <button
+                                                            type="button"
+                                                            onClick={() => renvoyerEnReserve(fiche)}
+                                                            disabled={estReservee}
+                                                            className="rounded-md bg-teal-700 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-teal-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+                                                          >
+                                                            {estReservee ? "Réservée" : "Envoyer dans la réserve"}
+                                                          </button>
+                                                        ) : (
+                                                          <button
+                                                            type="button"
+                                                            onClick={() => preparerSeance(sequence, seance)}
+                                                            disabled={preparationEnCours === idPreparation}
+                                                            className="rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-wait disabled:bg-slate-400"
+                                                          >
+                                                            {preparationEnCours === idPreparation
+                                                              ? "Préparation..."
+                                                              : "Préparer la séance"}
+                                                          </button>
+                                                        )}
                                                       </div>
-                                                      {fiche ? (
-                                                        <button
-                                                          type="button"
-                                                          onClick={() => renvoyerEnReserve(fiche)}
-                                                          disabled={estReservee}
-                                                          className="rounded-md bg-teal-700 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-teal-800 disabled:cursor-not-allowed disabled:bg-slate-400"
-                                                        >
-                                                          {estReservee
-                                                            ? "Réservée"
-                                                            : "Envoyer dans la réserve"}
-                                                        </button>
-                                                      ) : (
-                                                        <button
-                                                          type="button"
-                                                          onClick={() => preparerSeance(sequence, seance)}
-                                                          disabled={preparationEnCours === idPreparation}
-                                                          className="rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-wait disabled:bg-slate-400"
-                                                        >
-                                                          {preparationEnCours === idPreparation
-                                                            ? "Préparation..."
-                                                            : "Préparer la séance"}
-                                                        </button>
+
+                                                      {seance.beat && (
+                                                        <dl className="mt-3 grid gap-2 text-sm text-slate-700">
+                                                          <div>
+                                                            <dt className="font-semibold text-slate-900">Amorce</dt>
+                                                            <dd className="mt-0.5">{seance.beat.amorce}</dd>
+                                                          </div>
+                                                          <div>
+                                                            <dt className="font-semibold text-slate-900">Recherche</dt>
+                                                            <dd className="mt-0.5">{seance.beat.recherche}</dd>
+                                                          </div>
+                                                        </dl>
                                                       )}
-                                                    </div>
 
-                                                    <label className="mt-3 grid gap-2 text-sm leading-6 text-slate-800">
-                                                      <span className="font-semibold text-slate-950">
-                                                        Objectif de séance
-                                                      </span>
-                                                      <textarea
-                                                        value={seance.objectif}
-                                                        onChange={(event) =>
-                                                          modifierSeanceProgressionSauvegardee(
-                                                            sequence,
-                                                            seance.numero,
-                                                            { objectif: event.target.value }
-                                                          )
-                                                        }
-                                                        className="min-h-20 w-full rounded-md border border-slate-300 bg-white px-3 py-2 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
-                                                      />
-                                                    </label>
-                                                    {seance.activite && (
-                                                      <label className="mt-2 grid gap-2 text-sm leading-6 text-slate-700">
-                                                        <span className="font-semibold text-slate-950">
-                                                          Activité
-                                                        </span>
-                                                        <textarea
-                                                          value={seance.activite}
-                                                          onChange={(event) =>
-                                                            modifierSeanceProgressionSauvegardee(
-                                                              sequence,
-                                                              seance.numero,
-                                                              { activite: event.target.value }
-                                                            )
-                                                          }
-                                                          className="min-h-20 w-full rounded-md border border-slate-300 bg-white px-3 py-2 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
-                                                        />
-                                                      </label>
-                                                    )}
-
-                                                    {fiche && (
-                                                      <details className="mt-4 rounded-md border border-teal-200 bg-teal-50 p-3">
-                                                        <summary className="grid cursor-pointer grid-cols-[1fr_auto] items-center gap-3 text-sm font-semibold text-teal-900">
-                                                          <span>Voir la fiche de séance</span>
+                                                      {fiche && (
+                                                        <details className="mt-4 rounded-md border border-teal-200 bg-teal-50 p-3">
+                                                          <summary className="grid cursor-pointer grid-cols-[1fr_auto] items-center gap-3 text-sm font-semibold text-teal-900">
+                                                            <span>Voir la fiche de séance</span>
                                                             <button
                                                               type="button"
-                                                              onClick={(event) => {
-                                                                event.preventDefault();
-                                                                event.stopPropagation();
+                                                              onClick={(e) => {
+                                                                e.preventDefault();
+                                                                e.stopPropagation();
                                                                 imprimerFiche(fiche);
                                                               }}
                                                               className="rounded-md bg-slate-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-slate-800"
                                                             >
                                                               Imprimer
                                                             </button>
-                                                        </summary>
-                                                        <div
-                                                          id={`fiche-${fiche.id}`}
-                                                          className="mt-3 grid gap-3 text-sm leading-6 text-teal-950"
-                                                        >
-                                                          <label className="grid gap-2">
-                                                            <span className="font-semibold">Titre</span>
-                                                            <input
-                                                              value={fiche.lesson.titre}
-                                                              onChange={(event) =>
-                                                                modifierLessonSauvegardee(fiche, {
-                                                                  ...fiche.lesson,
-                                                                  titre: event.target.value
-                                                                })
-                                                              }
-                                                              className="w-full rounded-md border border-teal-200 bg-white px-3 py-2 font-semibold outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
-                                                            />
-                                                          </label>
-                                                          <label className="grid gap-2">
-                                                            <span className="font-semibold">Objectif</span>
-                                                            <textarea
-                                                              value={fiche.lesson.objectif}
-                                                              onChange={(event) =>
-                                                                modifierLessonSauvegardee(fiche, {
-                                                                  ...fiche.lesson,
-                                                                  objectif: event.target.value
-                                                                })
-                                                              }
-                                                              className="min-h-20 w-full rounded-md border border-teal-200 bg-white px-3 py-2 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
-                                                            />
-                                                          </label>
-                                                          <label className="grid gap-2">
-                                                            <span className="font-semibold">Durée</span>
-                                                            <input
-                                                              value={fiche.lesson.dureeTotale}
-                                                              onChange={(event) =>
-                                                                modifierLessonSauvegardee(fiche, {
-                                                                  ...fiche.lesson,
-                                                                  dureeTotale: event.target.value
-                                                                })
-                                                              }
-                                                              className="w-full rounded-md border border-teal-200 bg-white px-3 py-2 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
-                                                            />
-                                                          </label>
-                                                          <label className="grid gap-2">
-                                                            <span className="font-semibold">Matériel</span>
-                                                            <textarea
-                                                              value={fiche.lesson.materielGlobal}
-                                                              onChange={(event) =>
-                                                                modifierLessonSauvegardee(fiche, {
-                                                                  ...fiche.lesson,
-                                                                  materielGlobal: event.target.value
-                                                                })
-                                                              }
-                                                              className="min-h-20 w-full rounded-md border border-teal-200 bg-white px-3 py-2 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
-                                                            />
-                                                          </label>
+                                                          </summary>
+                                                          <div className="mt-3 grid gap-3 text-sm leading-6 text-teal-950">
+                                                            <label className="grid gap-2">
+                                                              <span className="font-semibold">Titre</span>
+                                                              <input
+                                                                value={fiche.lesson.titre}
+                                                                onChange={(e) =>
+                                                                  modifierLessonSauvegardee(fiche, {
+                                                                    ...fiche.lesson,
+                                                                    titre: e.target.value
+                                                                  })
+                                                                }
+                                                                className="w-full rounded-md border border-teal-200 bg-white px-3 py-2 font-semibold outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
+                                                              />
+                                                            </label>
+                                                            <label className="grid gap-2">
+                                                              <span className="font-semibold">Objectif</span>
+                                                              <textarea
+                                                                value={fiche.lesson.objectif}
+                                                                onChange={(e) =>
+                                                                  modifierLessonSauvegardee(fiche, {
+                                                                    ...fiche.lesson,
+                                                                    objectif: e.target.value
+                                                                  })
+                                                                }
+                                                                className="min-h-16 w-full rounded-md border border-teal-200 bg-white px-3 py-2 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
+                                                              />
+                                                            </label>
+                                                            <label className="grid gap-2">
+                                                              <span className="font-semibold">Durée (min)</span>
+                                                              <input
+                                                                type="number"
+                                                                value={fiche.lesson.duree_minutes}
+                                                                onChange={(e) =>
+                                                                  modifierLessonSauvegardee(fiche, {
+                                                                    ...fiche.lesson,
+                                                                    duree_minutes: Number(e.target.value) || fiche.lesson.duree_minutes
+                                                                  })
+                                                                }
+                                                                className="w-24 rounded-md border border-teal-200 bg-white px-3 py-2 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
+                                                              />
+                                                            </label>
+                                                            <label className="grid gap-2">
+                                                              <span className="font-semibold">Matériel</span>
+                                                              <textarea
+                                                                value={fiche.lesson.materiel?.join("\n") ?? ""}
+                                                                onChange={(e) =>
+                                                                  modifierLessonSauvegardee(fiche, {
+                                                                    ...fiche.lesson,
+                                                                    materiel: e.target.value.split("\n").filter(Boolean)
+                                                                  })
+                                                                }
+                                                                className="min-h-16 w-full rounded-md border border-teal-200 bg-white px-3 py-2 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
+                                                                placeholder="Un élément par ligne"
+                                                              />
+                                                            </label>
 
-                                                          {fiche.lesson.phases?.map((phase, index) => (
-                                                            <div
-                                                              key={`${fiche.id}-${index}-${phase.titre}`}
-                                                              className="phase rounded-md border border-teal-200 bg-white p-3"
-                                                            >
-                                                              <label className="grid gap-2">
-                                                                <span className="font-semibold text-slate-950">
-                                                                  Phase {index + 1}
-                                                                </span>
-                                                                <input
-                                                                  value={phase.titre}
-                                                                  onChange={(event) =>
-                                                                    modifierPhaseLessonSauvegardee(fiche, index, {
-                                                                      titre: event.target.value
-                                                                    })
-                                                                  }
-                                                                  className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 font-semibold text-slate-950 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
-                                                                />
-                                                              </label>
-                                                              <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                                                                <input
-                                                                  value={phase.duree}
-                                                                  onChange={(event) =>
-                                                                    modifierPhaseLessonSauvegardee(fiche, index, {
-                                                                      duree: event.target.value
-                                                                    })
-                                                                  }
-                                                                  className="rounded-md border border-slate-300 bg-white px-3 py-2 text-slate-600 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
-                                                                />
-                                                                <input
-                                                                  value={phase.organisation}
-                                                                  onChange={(event) =>
-                                                                    modifierPhaseLessonSauvegardee(fiche, index, {
-                                                                      organisation: event.target.value
-                                                                    })
-                                                                  }
-                                                                  className="rounded-md border border-slate-300 bg-white px-3 py-2 text-slate-600 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
-                                                                />
+                                                            {fiche.lesson.phases?.map((phase, index) => (
+                                                              <div
+                                                                key={`${fiche.id}-${index}-${phase.nom}`}
+                                                                className="rounded-md border border-teal-200 bg-white p-3"
+                                                              >
+                                                                <label className="grid gap-2">
+                                                                  <span className="font-semibold text-slate-950">
+                                                                    Phase {index + 1}
+                                                                  </span>
+                                                                  <input
+                                                                    value={phase.nom}
+                                                                    onChange={(e) =>
+                                                                      modifierPhaseLessonSauvegardee(fiche, index, {
+                                                                        nom: e.target.value
+                                                                      })
+                                                                    }
+                                                                    className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 font-semibold text-slate-950 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
+                                                                  />
+                                                                </label>
+                                                                <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                                                                  <input
+                                                                    type="number"
+                                                                    value={phase.duree_minutes}
+                                                                    onChange={(e) =>
+                                                                      modifierPhaseLessonSauvegardee(fiche, index, {
+                                                                        duree_minutes: Number(e.target.value) || phase.duree_minutes
+                                                                      })
+                                                                    }
+                                                                    className="rounded-md border border-slate-300 bg-white px-3 py-2 text-slate-600 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
+                                                                  />
+                                                                  <input
+                                                                    value={phase.disposition_classe}
+                                                                    onChange={(e) =>
+                                                                      modifierPhaseLessonSauvegardee(fiche, index, {
+                                                                        disposition_classe: e.target.value
+                                                                      })
+                                                                    }
+                                                                    className="rounded-md border border-slate-300 bg-white px-3 py-2 text-slate-600 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
+                                                                  />
+                                                                </div>
+                                                                <label className="mt-2 grid gap-2">
+                                                                  <span className="font-semibold">Rôle enseignant</span>
+                                                                  <textarea
+                                                                    value={phase.role_enseignant}
+                                                                    onChange={(e) =>
+                                                                      modifierPhaseLessonSauvegardee(fiche, index, {
+                                                                        role_enseignant: e.target.value
+                                                                      })
+                                                                    }
+                                                                    className="min-h-16 w-full rounded-md border border-slate-300 bg-white px-3 py-2 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
+                                                                  />
+                                                                </label>
+                                                                <label className="grid gap-2">
+                                                                  <span className="font-semibold">Consigne</span>
+                                                                  <textarea
+                                                                    value={phase.consigne}
+                                                                    onChange={(e) =>
+                                                                      modifierPhaseLessonSauvegardee(fiche, index, {
+                                                                        consigne: e.target.value
+                                                                      })
+                                                                    }
+                                                                    className="min-h-16 w-full rounded-md border border-slate-300 bg-white px-3 py-2 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
+                                                                  />
+                                                                </label>
+                                                                <label className="grid gap-2">
+                                                                  <span className="font-semibold">Activité élèves</span>
+                                                                  <textarea
+                                                                    value={phase.role_eleves}
+                                                                    onChange={(e) =>
+                                                                      modifierPhaseLessonSauvegardee(fiche, index, {
+                                                                        role_eleves: e.target.value
+                                                                      })
+                                                                    }
+                                                                    className="min-h-16 w-full rounded-md border border-slate-300 bg-white px-3 py-2 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
+                                                                  />
+                                                                </label>
+                                                                {phase.hors_champ && (
+                                                                  <div className="mt-2 rounded-md bg-blue-50 px-3 py-2 text-sm text-blue-900">
+                                                                    <span className="font-semibold">Hors-champ : </span>
+                                                                    {phase.hors_champ}
+                                                                  </div>
+                                                                )}
+                                                                {phase.erreurs_anticipees?.length ? (
+                                                                  <div className="mt-2 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                                                                    <span className="font-semibold block">Erreurs anticipées</span>
+                                                                    <ul className="mt-1 space-y-0.5">
+                                                                      {phase.erreurs_anticipees.map((err, i) => (
+                                                                        <li key={i}>• {err}</li>
+                                                                      ))}
+                                                                    </ul>
+                                                                  </div>
+                                                                ) : null}
                                                               </div>
-                                                              <label className="mt-2 grid gap-2">
-                                                                <span className="font-semibold">Rôle enseignant</span>
-                                                                <textarea
-                                                                  value={phase.roleEnseignant}
-                                                                  onChange={(event) =>
-                                                                    modifierPhaseLessonSauvegardee(fiche, index, {
-                                                                      roleEnseignant: event.target.value
-                                                                    })
-                                                                  }
-                                                                  className="min-h-20 w-full rounded-md border border-slate-300 bg-white px-3 py-2 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
-                                                                />
-                                                              </label>
-                                                              <label className="grid gap-2">
-                                                                <span className="font-semibold">Consigne</span>
-                                                                <textarea
-                                                                  value={phase.consigne}
-                                                                  onChange={(event) =>
-                                                                    modifierPhaseLessonSauvegardee(fiche, index, {
-                                                                      consigne: event.target.value
-                                                                    })
-                                                                  }
-                                                                  className="min-h-20 w-full rounded-md border border-slate-300 bg-white px-3 py-2 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
-                                                                />
-                                                              </label>
-                                                              <label className="grid gap-2">
-                                                                <span className="font-semibold">Activité élèves</span>
-                                                                <textarea
-                                                                  value={phase.activiteEleves}
-                                                                  onChange={(event) =>
-                                                                    modifierPhaseLessonSauvegardee(fiche, index, {
-                                                                      activiteEleves: event.target.value
-                                                                    })
-                                                                  }
-                                                                  className="min-h-20 w-full rounded-md border border-slate-300 bg-white px-3 py-2 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
-                                                                />
-                                                              </label>
-                                                            </div>
-                                                          ))}
+                                                            ))}
 
-                                                          {fiche.lesson.traceEcrite && (
-                                                            <label className="grid gap-2">
-                                                              <span className="font-semibold">Trace écrite</span>
-                                                              <textarea
-                                                                value={fiche.lesson.traceEcrite}
-                                                                onChange={(event) =>
-                                                                  modifierLessonSauvegardee(fiche, {
-                                                                    ...fiche.lesson,
-                                                                    traceEcrite: event.target.value
-                                                                  })
-                                                                }
-                                                                className="min-h-24 w-full rounded-md border border-teal-200 bg-white px-3 py-2 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
-                                                              />
-                                                            </label>
-                                                          )}
-                                                          {fiche.lesson.vigilance && (
-                                                            <label className="grid gap-2">
-                                                              <span className="font-semibold">Vigilance</span>
-                                                              <textarea
-                                                                value={fiche.lesson.vigilance}
-                                                                onChange={(event) =>
-                                                                  modifierLessonSauvegardee(fiche, {
-                                                                    ...fiche.lesson,
-                                                                    vigilance: event.target.value
-                                                                  })
-                                                                }
-                                                                className="min-h-24 w-full rounded-md border border-teal-200 bg-white px-3 py-2 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
-                                                              />
-                                                            </label>
-                                                          )}
-                                                        </div>
-                                                      </details>
-                                                    )}
-                                                  </article>
-                                                );
-                                              })}
-                                          </div>
-                                        </details>
-                                      </div>
-                                    </details>
-                                  ))}
-                                </div>
-                              </details>
-                            ))}
-                          </div>
-                        </details>
+                                                            {fiche.lesson.trace_ecrite && (
+                                                              <label className="grid gap-2">
+                                                                <span className="font-semibold">Trace écrite</span>
+                                                                <textarea
+                                                                  value={fiche.lesson.trace_ecrite}
+                                                                  onChange={(e) =>
+                                                                    modifierLessonSauvegardee(fiche, {
+                                                                      ...fiche.lesson,
+                                                                      trace_ecrite: e.target.value
+                                                                    })
+                                                                  }
+                                                                  className="min-h-24 w-full rounded-md border border-teal-200 bg-white px-3 py-2 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
+                                                                />
+                                                              </label>
+                                                            )}
+                                                            {fiche.lesson.vigilance && (
+                                                              <label className="grid gap-2">
+                                                                <span className="font-semibold">Vigilance</span>
+                                                                <textarea
+                                                                  value={fiche.lesson.vigilance}
+                                                                  onChange={(e) =>
+                                                                    modifierLessonSauvegardee(fiche, {
+                                                                      ...fiche.lesson,
+                                                                      vigilance: e.target.value
+                                                                    })
+                                                                  }
+                                                                  className="min-h-24 w-full rounded-md border border-teal-200 bg-white px-3 py-2 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
+                                                                />
+                                                              </label>
+                                                            )}
+                                                          </div>
+                                                        </details>
+                                                      )}
+                                                    </article>
+                                                  );
+                                                })}
+                                            </div>
+                                          </details>
+                                        </div>
+                                      </details>
+                                    ))}
+                                  </div>
+                                </details>
+                              ))}
+                            </div>
+                          </details>
                         );
                       })}
                     </div>
@@ -919,6 +889,3 @@ export default function BibliothequePage() {
     </main>
   );
 }
-
-
-

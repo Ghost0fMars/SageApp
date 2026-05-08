@@ -1,13 +1,23 @@
 import { NextResponse } from "next/server";
 import { callAiProvider, type AiProvider } from "../../lib/ai-provider";
 
+type BeatInput = {
+  amorce?: string;
+  recherche?: string;
+  mise_en_commun?: string;
+  institutionnalisation?: string | null;
+  entrainement?: string;
+};
+
 type SeanceSequence = {
   numero?: number;
-  phase?: string;
+  type?: string;
   titre?: string;
-  objectif?: string;
-  activite?: string;
-  traceOuProduction?: string;
+  est_seance_cloture?: boolean;
+  beat?: BeatInput;
+  tension_ouverte?: string | null;
+  materiel?: string[];
+  differenciation?: { soutien?: string; approfondissement?: string };
 };
 
 type GenerateLessonRequest = {
@@ -23,13 +33,16 @@ type GenerateLessonRequest = {
   seance?: SeanceSequence;
 };
 
-type PhaseSeance = {
-  titre: string;
-  duree: string;
-  organisation: string;
-  roleEnseignant: string;
+type PhaseSeanceDetaillee = {
+  nom: string;
+  duree_minutes: number;
+  disposition_classe: string;
+  role_enseignant: string;
   consigne: string;
-  activiteEleves: string;
+  role_eleves: string;
+  hors_champ: string | null;
+  erreurs_anticipees: string[];
+  relances: string[];
   materiel: string;
 };
 
@@ -37,10 +50,10 @@ type SeanceDetaillee = {
   titre: string;
   objectif: string;
   niveau: string;
-  dureeTotale: string;
-  materielGlobal: string;
-  phases: PhaseSeance[];
-  traceEcrite: string;
+  duree_minutes: number;
+  materiel: string[];
+  phases: PhaseSeanceDetaillee[];
+  trace_ecrite: string;
   vigilance: string;
 };
 
@@ -69,11 +82,9 @@ function extraireTexteOpenAI(data: OpenAIResponse) {
 function extraireJson(texte: string) {
   const debut = texte.indexOf("{");
   const fin = texte.lastIndexOf("}");
-
   if (debut === -1 || fin === -1) {
     throw new Error("La réponse de l'IA ne contient pas de JSON.");
   }
-
   return JSON.parse(texte.slice(debut, fin + 1)) as SeanceDetaillee;
 }
 
@@ -86,13 +97,98 @@ function seanceValide(seance: SeanceDetaillee) {
   );
 }
 
-const SYSTEM_PROMPT =
-  "Tu aides un enseignant à préparer des séances concrètes, progressives et adaptées au contexte de classe. Tu respectes strictement le format JSON demandé.";
+const SYSTEM_PROMPT = `<role>
+Tu es SAGE, un assistant pédagogique expert en préparation de séance.
+Tu prépares des séances détaillées, structurées comme des mises en scène pédagogiques.
+</role>
+
+<posture_enseignant>
+L'enseignant est un metteur en scène : il ne dit pas tout, il crée les conditions de la découverte.
+
+Règles absolues :
+- NE PAS donner la réponse dans l'amorce
+- Ménager du silence et de la réflexion individuelle avant toute mise en commun
+- Prévoir les erreurs probables et comment les exploiter — pas les éviter
+- Consignes en termes d'action : "trouvez", "comparez", "cherchez" — jamais "lisez" seul
+- Le champ hors_champ est aussi important que ce qu'on dit : qu'est-ce que l'enseignant ne doit PAS encore révéler à cette étape ?
+</posture_enseignant>
+
+<organisation_spatiale>
+Préciser pour chaque phase la disposition de classe :
+- regroupement (tapis, devant le tableau)
+- individuel (à la place)
+- groupes (îlots de 4)
+- binômes
+</organisation_spatiale>
+
+<exemple_phase>
+{
+  "nom": "Amorce — la question impossible",
+  "duree_minutes": 8,
+  "disposition_classe": "regroupement",
+  "role_enseignant": "Montrer deux photos : un carrefour en T et un carrefour en X. Demander : 'Laquelle tourne le plus fort ?' Rester silencieux. Attendre. Ne pas valider.",
+  "consigne": "Choisissez une route et expliquez pourquoi elle tourne plus fort.",
+  "role_eleves": "Observent, débattent par deux, formulent une opinion",
+  "hors_champ": "Le mot 'angle' ne doit pas encore être prononcé. La notion de mesure non plus.",
+  "erreurs_anticipees": ["confondre la largeur de la route et l'angle du virage", "comparer les longueurs plutôt que les directions"],
+  "relances": ["Comment expliqueriez-vous ça à quelqu'un sans la photo ?", "Et si les deux routes étaient identiques en couleur ?"],
+  "materiel": "2 photos projetées ou imprimées"
+}
+</exemple_phase>
+
+<format_sortie>
+Retourne UNIQUEMENT un JSON valide, sans Markdown :
+{
+  "titre": "string",
+  "objectif": "string",
+  "niveau": "string",
+  "duree_minutes": number,
+  "materiel": ["string"],
+  "phases": [
+    {
+      "nom": "string",
+      "duree_minutes": number,
+      "disposition_classe": "regroupement | individuel | groupes | binômes",
+      "role_enseignant": "string — paroles et gestes précis si pertinent",
+      "consigne": "string — formulée pour les élèves",
+      "role_eleves": "string",
+      "hors_champ": "string ou null",
+      "erreurs_anticipees": ["string"],
+      "relances": ["string"],
+      "materiel": "string"
+    }
+  ],
+  "trace_ecrite": "string",
+  "vigilance": "string"
+}
+</format_sortie>`;
 
 function buildPrompt(contexte: Omit<GenerateLessonRequest, "aiProvider" | "aiApiKey">) {
   const s = contexte.seance!;
-  return `
-Prépare une séance détaillée à partir de ces informations :
+  const beatInfo = s.beat
+    ? `- Structure prévue :
+  Amorce : ${s.beat.amorce ?? ""}
+  Recherche : ${s.beat.recherche ?? ""}
+  Mise en commun : ${s.beat.mise_en_commun ?? ""}
+  Entraînement : ${s.beat.entrainement ?? ""}`
+    : "";
+
+  const tensionInfo = s.tension_ouverte
+    ? `- Tension à maintenir ouverte : ${s.tension_ouverte}`
+    : "";
+
+  const cloture = s.est_seance_cloture
+    ? "- C'est la séance de clôture : inclure l'institutionnalisation."
+    : "";
+
+  const differenciationInfo =
+    s.differenciation?.soutien || s.differenciation?.approfondissement
+      ? `- Différenciation prévue :
+  Soutien : ${s.differenciation?.soutien ?? ""}
+  Approfondissement : ${s.differenciation?.approfondissement ?? ""}`
+      : "";
+
+  return `Prépare une séance détaillée à partir de ces informations :
 - Cycle : ${contexte.cycle}
 - Niveau : ${contexte.niveau}
 - Domaine : ${contexte.domaine}
@@ -100,46 +196,11 @@ Prépare une séance détaillée à partir de ces informations :
 - Item : ${contexte.item}
 - Compétence : ${contexte.competence}
 - Objectif de la séquence : ${contexte.objectifSequence}
-- Séance à préparer : séance ${s.numero ?? ""}, phase "${s.phase ?? ""}", titre "${s.titre}"
-- Objectif de cette séance : ${s.objectif}
-- Activité prévue dans la progression : ${s.activite ?? ""}
-- Trace ou production prévue : ${s.traceOuProduction ?? ""}
-
-Construis un déroulement réaliste et directement utilisable par l'enseignant.
-Le cheminement général à adapter est :
-1. phase de lancement ;
-2. phase de recherche, individuelle, en groupe ou en binôme selon ce qui est pertinent ;
-3. phase de mise en commun avec validation d'une ou plusieurs méthodes ;
-4. phase d'entraînement ou de consolidation de la ou des stratégies opératoires ;
-5. phase d'institutionnalisation avec écriture d'une trace écrite.
-
-Ce déroulement n'est pas canonique : adapte le nombre, le nom et le contenu des phases au type de séance.
-Pour une séance d'évaluation, limite les phases de recherche ou d'entraînement si ce n'est pas pertinent.
-Pour une séance d'introduction, donne plus de place à la situation de découverte.
-Pour une séance de synthèse, donne plus de place à la verbalisation et à la trace.
-
-Réponds uniquement avec un JSON valide, sans Markdown, au format suivant :
-{
-  "titre": "Titre de la séance",
-  "objectif": "Objectif opérationnel de la séance",
-  "niveau": "Niveau concerné",
-  "dureeTotale": "Durée indicative",
-  "materielGlobal": "Matériel nécessaire",
-  "phases": [
-    {
-      "titre": "Nom de la phase",
-      "duree": "Durée indicative",
-      "organisation": "individuel, binôme, groupe, collectif...",
-      "roleEnseignant": "Ce que fait l'enseignant",
-      "consigne": "Consigne formulée pour les élèves",
-      "activiteEleves": "Ce que font les élèves",
-      "materiel": "Matériel utilisé dans cette phase"
-    }
-  ],
-  "traceEcrite": "Proposition de trace écrite ou orale institutionnalisée",
-  "vigilance": "Point d'attention pour l'enseignant"
-}
-`;
+- Séance ${s.numero ?? ""}, type "${s.type ?? ""}", titre "${s.titre}"
+${beatInfo}
+${tensionInfo}
+${cloture}
+${differenciationInfo}`;
 }
 
 export async function POST(request: Request) {
@@ -154,8 +215,7 @@ export async function POST(request: Request) {
     !contexte.item ||
     !contexte.competence ||
     !contexte.objectifSequence ||
-    !contexte.seance?.titre ||
-    !contexte.seance?.objectif
+    !contexte.seance?.titre
   ) {
     return NextResponse.json(
       { error: "Les éléments de contexte, l'objectif et la séance choisie sont obligatoires." },
@@ -180,7 +240,7 @@ export async function POST(request: Request) {
         apiKey: aiApiKey,
         system: SYSTEM_PROMPT,
         prompt,
-        maxTokens: 2200
+        maxTokens: 2800
       });
 
       const seance = parseSeance(texte);
@@ -225,7 +285,7 @@ export async function POST(request: Request) {
       model: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
       instructions: SYSTEM_PROMPT,
       input: prompt,
-      max_output_tokens: 2200,
+      max_output_tokens: 2800,
       reasoning: { effort: "none" }
     })
   });

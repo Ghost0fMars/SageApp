@@ -8,8 +8,8 @@ type SeanceDetaillee = {
   titre: string;
   objectif: string;
   niveau: string;
-  dureeTotale: string;
-  materielGlobal: string;
+  duree_minutes: number;
+  materiel: string[];
 };
 
 type TuilePlanning = {

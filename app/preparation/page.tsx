@@ -6,7 +6,6 @@ import { readUserData, writeUserData } from "../lib/user-storage";
 import { readAiConfig } from "../lib/ai-config";
 import { supabase } from "../lib/supabase-client";
 
-// TypeScript décrit ici la forme d'une ligne du fichier JSON d'origine.
 type LigneReferentielBrute = {
   Cycle: string;
   Niveau: string;
@@ -16,7 +15,6 @@ type LigneReferentielBrute = {
   "Compétence": string;
 };
 
-// Cette forme simplifiée est celle que l'application utilise ensuite.
 type LigneReferentiel = {
   cycle: string;
   niveau: string;
@@ -42,28 +40,46 @@ type Selection = {
   competence: string;
 };
 
+type Beat = {
+  amorce: string;
+  recherche: string;
+  mise_en_commun: string;
+  institutionnalisation: string | null;
+  entrainement: string;
+};
+
 type Seance = {
   numero: number;
-  phase: string;
+  type: string;
   titre: string;
-  objectif: string;
-  activite: string;
-  traceOuProduction: string;
+  est_seance_cloture: boolean;
+  duree_minutes: number;
+  beat: Beat;
+  tension_ouverte: string | null;
+  materiel: string[];
+  differenciation: {
+    soutien: string;
+    approfondissement: string;
+  };
 };
 
 type Sequence = {
   titre: string;
   intention: string;
+  regime: string;
   seances: Seance[];
 };
 
 type PhaseSeanceDetaillee = {
-  titre: string;
-  duree: string;
-  organisation: string;
-  roleEnseignant: string;
+  nom: string;
+  duree_minutes: number;
+  disposition_classe: string;
+  role_enseignant: string;
   consigne: string;
-  activiteEleves: string;
+  role_eleves: string;
+  hors_champ: string | null;
+  erreurs_anticipees: string[];
+  relances: string[];
   materiel: string;
 };
 
@@ -71,10 +87,10 @@ type SeanceDetaillee = {
   titre: string;
   objectif: string;
   niveau: string;
-  dureeTotale: string;
-  materielGlobal: string;
+  duree_minutes: number;
+  materiel: string[];
   phases: PhaseSeanceDetaillee[];
-  traceEcrite: string;
+  trace_ecrite: string;
   vigilance: string;
 };
 
@@ -102,7 +118,7 @@ type SeancePreparee = {
   sequenceTitle: string;
   sequenceTotal: number;
   seanceNumero: number;
-  seancePhase: string;
+  seanceType: string;
   lesson: SeanceDetaillee;
 };
 
@@ -151,7 +167,6 @@ const ordreSelection: Array<keyof Selection> = [
 ];
 
 function valeursUniques(lignes: LigneReferentiel[], champ: keyof LigneReferentiel) {
-  // Set supprime les doublons, puis on trie pour rendre les listes plus lisibles.
   return Array.from(new Set(lignes.map((ligne) => ligne[champ]).filter(Boolean))).sort(
     (a, b) => a.localeCompare(b, "fr")
   );
@@ -163,8 +178,6 @@ function filtrerReferentiel(
   jusquA?: keyof Selection
 ) {
   const limite = jusquA ? ordreSelection.indexOf(jusquA) : ordreSelection.length;
-
-  // On garde seulement les lignes compatibles avec les choix déjà faits.
   return lignes.filter((ligne) =>
     ordreSelection.slice(0, limite).every((champ) => {
       const valeurSelectionnee = selection[champ];
@@ -176,16 +189,13 @@ function filtrerReferentiel(
 function reinitialiserApresChamp(selection: Selection, champModifie: keyof Selection) {
   const prochainEtat = { ...selection };
   const indexChampModifie = ordreSelection.indexOf(champModifie);
-
-  // Quand un choix change, les champs suivants doivent être vidés.
   ordreSelection.slice(indexChampModifie + 1).forEach((champ) => {
     prochainEtat[champ] = "";
   });
-
   return prochainEtat;
 }
 
-export default function PageAccueil() {
+export default function PagePreparation() {
   const [selection, setSelection] = useState<Selection>(selectionVide);
   const [objectif, setObjectif] = useState("");
   const [sequence, setSequence] = useState<Sequence | null>(null);
@@ -200,7 +210,6 @@ export default function PageAccueil() {
   const [sequenceEnCours, setSequenceEnCours] = useState(false);
   const [seanceEnCours, setSeanceEnCours] = useState<number | null>(null);
 
-  // useMemo évite de transformer le JSON à chaque affichage de la page.
   const referentiel = useMemo<LigneReferentiel[]>(
     () =>
       (referentielBrut as LigneReferentielBrute[]).map((ligne) => ({
@@ -216,16 +225,12 @@ export default function PageAccueil() {
 
   useEffect(() => {
     function verifierSiSeancePlanifiee() {
-      if (!seancePrepareeId) {
-        return;
-      }
-
+      if (!seancePrepareeId) return;
       const tuilesExistantes = readUserData<TuilePlanning[]>(
         PLANNING_STORAGE_KEY,
         [],
         PLANNING_STORAGE_KEY
       );
-
       setSeanceEnReserve(
         tuilesExistantes.some((tuile) => tuile.preparedLessonId === seancePrepareeId)
       );
@@ -234,7 +239,6 @@ export default function PageAccueil() {
     verifierSiSeancePlanifiee();
     window.addEventListener("focus", verifierSiSeancePlanifiee);
     document.addEventListener("visibilitychange", verifierSiSeancePlanifiee);
-
     return () => {
       window.removeEventListener("focus", verifierSiSeancePlanifiee);
       document.removeEventListener("visibilitychange", verifierSiSeancePlanifiee);
@@ -242,11 +246,7 @@ export default function PageAccueil() {
   }, [seancePrepareeId]);
 
   const etapes: EtapeSelection[] = [
-    {
-      id: "cycle",
-      label: libelles.cycle,
-      options: valeursUniques(referentiel, "cycle")
-    },
+    { id: "cycle", label: libelles.cycle, options: valeursUniques(referentiel, "cycle") },
     {
       id: "niveau",
       label: libelles.niveau,
@@ -286,11 +286,7 @@ export default function PageAccueil() {
   ];
 
   function changerSelection(champ: keyof Selection, valeur: string) {
-    // On met à jour le champ choisi, puis on remet à zéro les choix dépendants.
-    setSelection((selectionActuelle) => ({
-      ...reinitialiserApresChamp(selectionActuelle, champ),
-      [champ]: valeur
-    }));
+    setSelection((sel) => ({ ...reinitialiserApresChamp(sel, champ), [champ]: valeur }));
     setObjectif("");
     setSequence(null);
     setSequenceSauvegardeeId("");
@@ -316,9 +312,7 @@ export default function PageAccueil() {
       const aiConfig = readAiConfig();
       const response = await fetch("/api/generate-objective", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           niveau: selection.niveau,
           domaine: selection.domaine,
@@ -385,6 +379,7 @@ export default function PageAccueil() {
           item: selection.item,
           competence: selection.competence,
           objectif,
+          typeSequence: "introduction",
           aiProvider: aiConfig?.provider,
           aiApiKey: aiConfig?.apiKey
         })
@@ -449,9 +444,7 @@ export default function PageAccueil() {
       const aiConfig = readAiConfig();
       const response = await fetch("/api/generate-lesson", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           cycle: selection.cycle,
           niveau: selection.niveau,
@@ -489,7 +482,7 @@ export default function PageAccueil() {
           sequenceTitle: sequence.titre,
           sequenceTotal: sequence.seances.length,
           seanceNumero: seance.numero,
-          seancePhase: seance.phase,
+          seanceType: seance.type,
           lesson: data.seance
         };
 
@@ -510,46 +503,44 @@ export default function PageAccueil() {
 
   function modifierSequence(prochaineSequence: Sequence) {
     setSequence(prochaineSequence);
-
-    if (!sequenceSauvegardeeId) {
-      return;
-    }
+    if (!sequenceSauvegardeeId) return;
 
     const sequencesExistantes = readUserData<SequencePreparee[]>(
       SEQUENCES_STORAGE_KEY,
       [],
       SEQUENCES_STORAGE_KEY
     );
-
     writeUserData(
       SEQUENCES_STORAGE_KEY,
-      sequencesExistantes.map((sequenceSauvegardee) =>
-        sequenceSauvegardee.id === sequenceSauvegardeeId
-          ? { ...sequenceSauvegardee, sequence: prochaineSequence }
-          : sequenceSauvegardee
+      sequencesExistantes.map((s) =>
+        s.id === sequenceSauvegardeeId ? { ...s, sequence: prochaineSequence } : s
       )
     );
   }
 
-  function modifierSeanceProgression(numero: number, miseAJour: Partial<Seance>) {
-    if (!sequence) {
-      return;
-    }
-
+  function modifierSeance(numero: number, miseAJour: Partial<Seance>) {
+    if (!sequence) return;
     modifierSequence({
       ...sequence,
-      seances: sequence.seances.map((seance) =>
-        seance.numero === numero ? { ...seance, ...miseAJour } : seance
+      seances: sequence.seances.map((s) =>
+        s.numero === numero ? { ...s, ...miseAJour } : s
+      )
+    });
+  }
+
+  function modifierBeat(numero: number, miseAJour: Partial<Beat>) {
+    if (!sequence) return;
+    modifierSequence({
+      ...sequence,
+      seances: sequence.seances.map((s) =>
+        s.numero === numero ? { ...s, beat: { ...s.beat, ...miseAJour } } : s
       )
     });
   }
 
   function modifierSeanceDetaillee(prochaineSeance: SeanceDetaillee) {
     setSeanceDetaillee(prochaineSeance);
-
-    if (!seancePrepareeId) {
-      return;
-    }
+    if (!seancePrepareeId) return;
 
     const seancesExistantes = readUserData<SeancePreparee[]>(
       PREPARED_LESSONS_STORAGE_KEY,
@@ -564,10 +555,8 @@ export default function PageAccueil() {
 
     writeUserData(
       PREPARED_LESSONS_STORAGE_KEY,
-      seancesExistantes.map((seancePreparee) =>
-        seancePreparee.id === seancePrepareeId
-          ? { ...seancePreparee, lesson: prochaineSeance }
-          : seancePreparee
+      seancesExistantes.map((sp) =>
+        sp.id === seancePrepareeId ? { ...sp, lesson: prochaineSeance } : sp
       )
     );
     writeUserData(
@@ -577,21 +566,16 @@ export default function PageAccueil() {
           ? {
               ...tuile,
               titreSequence: sequence?.titre ?? tuile.titreSequence,
-              dureeMinutes: lireDureeEnMinutes(prochaineSeance.dureeTotale),
+              dureeMinutes: prochaineSeance.duree_minutes,
               lesson: prochaineSeance
             }
           : tuile
       )
     );
   }
-  function modifierPhaseSeanceDetaillee(
-    indexPhase: number,
-    miseAJour: Partial<PhaseSeanceDetaillee>
-  ) {
-    if (!seanceDetaillee) {
-      return;
-    }
 
+  function modifierPhase(indexPhase: number, miseAJour: Partial<PhaseSeanceDetaillee>) {
+    if (!seanceDetaillee) return;
     modifierSeanceDetaillee({
       ...seanceDetaillee,
       phases: seanceDetaillee.phases.map((phase, index) =>
@@ -599,22 +583,9 @@ export default function PageAccueil() {
       )
     });
   }
-  function lireDureeEnMinutes(duree: string) {
-    const heures = duree.match(/(\d+)\s*h/i);
-    const minutes = duree.match(/(\d+)\s*min/i);
-
-    const totalHeures = heures ? Number(heures[1]) * 60 : 0;
-    const totalMinutes = minutes ? Number(minutes[1]) : 0;
-    const total = totalHeures + totalMinutes;
-
-    return total > 0 ? total : 55;
-  }
 
   function exporterSeancePdf() {
-    if (!seanceDetaillee) {
-      return;
-    }
-
+    if (!seanceDetaillee) return;
     window.print();
   }
 
@@ -624,9 +595,7 @@ export default function PageAccueil() {
       return;
     }
 
-    if (seanceEnReserve) {
-      return;
-    }
+    if (seanceEnReserve) return;
 
     const tuile: TuilePlanning = {
       id: crypto.randomUUID(),
@@ -634,7 +603,7 @@ export default function PageAccueil() {
       titreSequence: sequence.titre,
       seanceLabel: `${seanceSource.numero}/${sequence.seances.length}`,
       domaine: selection.domaine,
-      dureeMinutes: lireDureeEnMinutes(seanceDetaillee.dureeTotale),
+      dureeMinutes: seanceDetaillee.duree_minutes,
       lesson: seanceDetaillee
     };
 
@@ -643,7 +612,6 @@ export default function PageAccueil() {
       [],
       PLANNING_STORAGE_KEY
     );
-
     writeUserData(PLANNING_STORAGE_KEY, [...tuilesExistantes, tuile]);
     setSeanceEnReserve(true);
     setMessagePlanning("La séance a été envoyée dans la réserve du planning.");
@@ -682,7 +650,7 @@ export default function PageAccueil() {
                   <select
                     value={selection[etape.id]}
                     disabled={etape.disabled}
-                    onChange={(evenement) => changerSelection(etape.id, evenement.target.value)}
+                    onChange={(e) => changerSelection(etape.id, e.target.value)}
                     className="min-h-11 w-full min-w-0 max-w-full truncate rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 shadow-sm outline-none transition focus:border-teal-600 focus:ring-2 focus:ring-teal-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
                   >
                     <option value="">Sélectionner...</option>
@@ -744,14 +712,19 @@ export default function PageAccueil() {
         {sequence && (
           <section className="mt-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
             <div className="border-b border-slate-200 pb-4">
-              <p className="text-sm font-semibold uppercase tracking-wide text-teal-700">
-                Progression de séquence
-              </p>
+              <div className="flex items-center gap-3">
+                <p className="text-sm font-semibold uppercase tracking-wide text-teal-700">
+                  Progression de séquence
+                </p>
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                  {sequence.regime}
+                </span>
+              </div>
               <label className="mt-2 grid gap-2">
                 <span className="text-sm font-semibold text-slate-700">Titre de la séquence</span>
                 <input
                   value={sequence.titre}
-                  onChange={(event) => modifierSequence({ ...sequence, titre: event.target.value })}
+                  onChange={(e) => modifierSequence({ ...sequence, titre: e.target.value })}
                   className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-2xl font-bold text-slate-950 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
                 />
               </label>
@@ -759,8 +732,8 @@ export default function PageAccueil() {
                 <span className="text-sm font-semibold text-slate-700">Intention générale</span>
                 <textarea
                   value={sequence.intention}
-                  onChange={(event) => modifierSequence({ ...sequence, intention: event.target.value })}
-                  className="min-h-24 w-full rounded-md border border-slate-300 bg-white px-3 py-2 leading-7 text-slate-700 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
+                  onChange={(e) => modifierSequence({ ...sequence, intention: e.target.value })}
+                  className="min-h-20 w-full rounded-md border border-slate-300 bg-white px-3 py-2 leading-7 text-slate-700 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
                 />
               </label>
             </div>
@@ -776,61 +749,105 @@ export default function PageAccueil() {
                       Séance {seance.numero}
                     </span>
                     <span className="text-sm font-semibold uppercase tracking-wide text-slate-600">
-                      {seance.phase}
+                      {seance.type}
                     </span>
+                    <span className="text-sm text-slate-500">{seance.duree_minutes} min</span>
+                    {seance.est_seance_cloture && (
+                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
+                        Clôture
+                      </span>
+                    )}
                   </div>
 
-                                    <label className="mt-3 grid gap-2">
+                  <label className="mt-3 grid gap-2">
                     <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Titre</span>
                     <input
                       value={seance.titre}
-                      onChange={(event) =>
-                        modifierSeanceProgression(seance.numero, { titre: event.target.value })
-                      }
+                      onChange={(e) => modifierSeance(seance.numero, { titre: e.target.value })}
                       className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-lg font-semibold text-slate-950 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
                     />
                   </label>
 
                   <dl className="mt-3 grid gap-3 text-sm leading-6 text-slate-800">
                     <div>
-                      <dt className="font-semibold text-slate-950">Objectif de séance</dt>
-                                            <dd>
+                      <dt className="font-semibold text-slate-950">Amorce</dt>
+                      <dd>
                         <textarea
-                          value={seance.objectif}
-                          onChange={(event) =>
-                            modifierSeanceProgression(seance.numero, { objectif: event.target.value })
-                          }
-                          className="mt-1 min-h-20 w-full rounded-md border border-slate-300 bg-white px-3 py-2 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
+                          value={seance.beat.amorce}
+                          onChange={(e) => modifierBeat(seance.numero, { amorce: e.target.value })}
+                          className="mt-1 min-h-16 w-full rounded-md border border-slate-300 bg-white px-3 py-2 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
                         />
                       </dd>
                     </div>
                     <div>
-                      <dt className="font-semibold text-slate-950">Activité principale</dt>
-                                            <dd>
+                      <dt className="font-semibold text-slate-950">Recherche</dt>
+                      <dd>
                         <textarea
-                          value={seance.activite}
-                          onChange={(event) =>
-                            modifierSeanceProgression(seance.numero, { activite: event.target.value })
-                          }
-                          className="mt-1 min-h-20 w-full rounded-md border border-slate-300 bg-white px-3 py-2 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
+                          value={seance.beat.recherche}
+                          onChange={(e) => modifierBeat(seance.numero, { recherche: e.target.value })}
+                          className="mt-1 min-h-16 w-full rounded-md border border-slate-300 bg-white px-3 py-2 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
                         />
                       </dd>
                     </div>
                     <div>
-                      <dt className="font-semibold text-slate-950">Trace ou production</dt>
-                                            <dd>
+                      <dt className="font-semibold text-slate-950">Mise en commun</dt>
+                      <dd>
                         <textarea
-                          value={seance.traceOuProduction}
-                          onChange={(event) =>
-                            modifierSeanceProgression(seance.numero, {
-                              traceOuProduction: event.target.value
-                            })
-                          }
-                          className="mt-1 min-h-20 w-full rounded-md border border-slate-300 bg-white px-3 py-2 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
+                          value={seance.beat.mise_en_commun}
+                          onChange={(e) => modifierBeat(seance.numero, { mise_en_commun: e.target.value })}
+                          className="mt-1 min-h-16 w-full rounded-md border border-slate-300 bg-white px-3 py-2 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
+                        />
+                      </dd>
+                    </div>
+                    {seance.est_seance_cloture && seance.beat.institutionnalisation !== null && (
+                      <div>
+                        <dt className="font-semibold text-slate-950">Institutionnalisation</dt>
+                        <dd>
+                          <textarea
+                            value={seance.beat.institutionnalisation ?? ""}
+                            onChange={(e) =>
+                              modifierBeat(seance.numero, { institutionnalisation: e.target.value })
+                            }
+                            className="mt-1 min-h-16 w-full rounded-md border border-teal-200 bg-teal-50 px-3 py-2 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
+                          />
+                        </dd>
+                      </div>
+                    )}
+                    <div>
+                      <dt className="font-semibold text-slate-950">Entraînement</dt>
+                      <dd>
+                        <textarea
+                          value={seance.beat.entrainement}
+                          onChange={(e) => modifierBeat(seance.numero, { entrainement: e.target.value })}
+                          className="mt-1 min-h-16 w-full rounded-md border border-slate-300 bg-white px-3 py-2 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
                         />
                       </dd>
                     </div>
                   </dl>
+
+                  {!seance.est_seance_cloture && seance.tension_ouverte && (
+                    <p className="mt-3 rounded-md bg-blue-50 px-3 py-2 text-sm text-blue-900">
+                      <span className="font-semibold">Tension ouverte : </span>
+                      {seance.tension_ouverte}
+                    </p>
+                  )}
+
+                  {(seance.differenciation.soutien || seance.differenciation.approfondissement) && (
+                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                      {seance.differenciation.soutien && (
+                        <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                          <span className="font-semibold block">Soutien</span>
+                          {seance.differenciation.soutien}
+                        </p>
+                      )}
+                      {seance.differenciation.approfondissement && (
+                        <p className="rounded-md bg-purple-50 px-3 py-2 text-xs text-purple-900">
+                          <span className="font-semibold block">Approfondissement</span>
+                          {seance.differenciation.approfondissement}
+                        </p>
+                      )}
+                    </div>
+                  )}
 
                   <button
                     type="button"
@@ -838,9 +855,7 @@ export default function PageAccueil() {
                     disabled={seanceEnCours !== null}
                     className="mt-4 rounded-md bg-teal-700 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-teal-800 focus:outline-none focus:ring-2 focus:ring-teal-300 disabled:cursor-wait disabled:bg-teal-900/60"
                   >
-                    {seanceEnCours === seance.numero
-                      ? "Préparation..."
-                      : "Préparer cette séance"}
+                    {seanceEnCours === seance.numero ? "Préparation..." : "Préparer cette séance"}
                   </button>
                 </article>
               ))}
@@ -861,8 +876,8 @@ export default function PageAccueil() {
                 <span className="text-sm font-semibold text-slate-700">Titre de la séance</span>
                 <input
                   value={seanceDetaillee.titre}
-                  onChange={(event) =>
-                    modifierSeanceDetaillee({ ...seanceDetaillee, titre: event.target.value })
+                  onChange={(e) =>
+                    modifierSeanceDetaillee({ ...seanceDetaillee, titre: e.target.value })
                   }
                   className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-2xl font-bold text-slate-950 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
                 />
@@ -871,8 +886,8 @@ export default function PageAccueil() {
                 <span className="text-sm font-semibold text-slate-700">Objectif de la séance</span>
                 <textarea
                   value={seanceDetaillee.objectif}
-                  onChange={(event) =>
-                    modifierSeanceDetaillee({ ...seanceDetaillee, objectif: event.target.value })
+                  onChange={(e) =>
+                    modifierSeanceDetaillee({ ...seanceDetaillee, objectif: e.target.value })
                   }
                   className="min-h-20 w-full rounded-md border border-slate-300 bg-white px-3 py-2 leading-7 text-slate-700 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
                 />
@@ -882,31 +897,39 @@ export default function PageAccueil() {
                   <span className="text-xs font-semibold text-slate-500">Niveau</span>
                   <input
                     value={seanceDetaillee.niveau}
-                    onChange={(event) =>
-                      modifierSeanceDetaillee({ ...seanceDetaillee, niveau: event.target.value })
+                    onChange={(e) =>
+                      modifierSeanceDetaillee({ ...seanceDetaillee, niveau: e.target.value })
                     }
                     className="min-w-0 bg-transparent text-sm font-semibold outline-none"
                   />
                 </label>
                 <label className="grid gap-1 rounded-md bg-slate-100 px-3 py-2">
-                  <span className="text-xs font-semibold text-slate-500">Durée</span>
+                  <span className="text-xs font-semibold text-slate-500">Durée (min)</span>
                   <input
-                    value={seanceDetaillee.dureeTotale}
-                    onChange={(event) =>
-                      modifierSeanceDetaillee({ ...seanceDetaillee, dureeTotale: event.target.value })
+                    type="number"
+                    value={seanceDetaillee.duree_minutes}
+                    onChange={(e) =>
+                      modifierSeanceDetaillee({
+                        ...seanceDetaillee,
+                        duree_minutes: Number(e.target.value) || seanceDetaillee.duree_minutes
+                      })
                     }
-                    className="min-w-0 bg-transparent text-sm font-semibold outline-none"
+                    className="min-w-0 w-20 bg-transparent text-sm font-semibold outline-none"
                   />
                 </label>
               </div>
               <label className="mt-3 grid gap-2 text-sm leading-6 text-slate-700">
                 <span className="font-semibold text-slate-950">Matériel</span>
                 <textarea
-                  value={seanceDetaillee.materielGlobal}
-                  onChange={(event) =>
-                    modifierSeanceDetaillee({ ...seanceDetaillee, materielGlobal: event.target.value })
+                  value={seanceDetaillee.materiel.join("\n")}
+                  onChange={(e) =>
+                    modifierSeanceDetaillee({
+                      ...seanceDetaillee,
+                      materiel: e.target.value.split("\n").filter(Boolean)
+                    })
                   }
-                  className="min-h-20 w-full rounded-md border border-slate-300 bg-white px-3 py-2 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
+                  className="min-h-16 w-full rounded-md border border-slate-300 bg-white px-3 py-2 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
+                  placeholder="Un élément par ligne"
                 />
               </label>
             </div>
@@ -914,36 +937,37 @@ export default function PageAccueil() {
             <div className="mt-5 grid gap-4">
               {seanceDetaillee.phases.map((phase, index) => (
                 <article
-                  key={`${index}-${phase.titre}`}
+                  key={`${index}-${phase.nom}`}
                   className="rounded-md border border-slate-200 bg-slate-50 p-4"
                 >
                   <div className="flex flex-wrap items-center gap-3">
                     <span className="rounded-full bg-slate-900 px-3 py-1 text-sm font-semibold text-white">
                       Phase {index + 1}
                     </span>
-                                        <input
-                      value={phase.duree}
-                      onChange={(event) =>
-                        modifierPhaseSeanceDetaillee(index, { duree: event.target.value })
+                    <input
+                      type="number"
+                      value={phase.duree_minutes}
+                      onChange={(e) =>
+                        modifierPhase(index, {
+                          duree_minutes: Number(e.target.value) || phase.duree_minutes
+                        })
                       }
-                      className="w-24 rounded-md border border-slate-300 bg-white px-2 py-1 text-sm font-medium text-slate-600 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
+                      className="w-20 rounded-md border border-slate-300 bg-white px-2 py-1 text-sm font-medium text-slate-600 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
                     />
                     <input
-                      value={phase.organisation}
-                      onChange={(event) =>
-                        modifierPhaseSeanceDetaillee(index, { organisation: event.target.value })
+                      value={phase.disposition_classe}
+                      onChange={(e) =>
+                        modifierPhase(index, { disposition_classe: e.target.value })
                       }
                       className="min-w-40 flex-1 rounded-md border border-slate-300 bg-white px-2 py-1 text-sm font-medium text-slate-600 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
                     />
                   </div>
 
-                                    <label className="mt-3 grid gap-2">
+                  <label className="mt-3 grid gap-2">
                     <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Titre de phase</span>
                     <input
-                      value={phase.titre}
-                      onChange={(event) =>
-                        modifierPhaseSeanceDetaillee(index, { titre: event.target.value })
-                      }
+                      value={phase.nom}
+                      onChange={(e) => modifierPhase(index, { nom: e.target.value })}
                       className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-lg font-semibold text-slate-950 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
                     />
                   </label>
@@ -951,13 +975,11 @@ export default function PageAccueil() {
                   <dl className="mt-3 grid gap-3 text-sm leading-6 text-slate-800">
                     <div>
                       <dt className="font-semibold text-slate-950">Rôle de l'enseignant</dt>
-                                            <dd>
+                      <dd>
                         <textarea
-                          value={phase.roleEnseignant}
-                          onChange={(event) =>
-                            modifierPhaseSeanceDetaillee(index, {
-                              roleEnseignant: event.target.value
-                            })
+                          value={phase.role_enseignant}
+                          onChange={(e) =>
+                            modifierPhase(index, { role_enseignant: e.target.value })
                           }
                           className="mt-1 min-h-20 w-full rounded-md border border-slate-300 bg-white px-3 py-2 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
                         />
@@ -965,39 +987,61 @@ export default function PageAccueil() {
                     </div>
                     <div>
                       <dt className="font-semibold text-slate-950">Consigne</dt>
-                                            <dd>
+                      <dd>
                         <textarea
                           value={phase.consigne}
-                          onChange={(event) =>
-                            modifierPhaseSeanceDetaillee(index, { consigne: event.target.value })
-                          }
-                          className="mt-1 min-h-20 w-full rounded-md border border-slate-300 bg-white px-3 py-2 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
+                          onChange={(e) => modifierPhase(index, { consigne: e.target.value })}
+                          className="mt-1 min-h-16 w-full rounded-md border border-slate-300 bg-white px-3 py-2 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
                         />
                       </dd>
                     </div>
                     <div>
                       <dt className="font-semibold text-slate-950">Activité des élèves</dt>
-                                            <dd>
+                      <dd>
                         <textarea
-                          value={phase.activiteEleves}
-                          onChange={(event) =>
-                            modifierPhaseSeanceDetaillee(index, {
-                              activiteEleves: event.target.value
-                            })
-                          }
+                          value={phase.role_eleves}
+                          onChange={(e) => modifierPhase(index, { role_eleves: e.target.value })}
                           className="mt-1 min-h-20 w-full rounded-md border border-slate-300 bg-white px-3 py-2 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
                         />
                       </dd>
                     </div>
+                    {phase.hors_champ && (
+                      <div className="rounded-md bg-blue-50 px-3 py-2">
+                        <dt className="font-semibold text-blue-900">Hors-champ</dt>
+                        <dd className="mt-1 text-blue-800">{phase.hors_champ}</dd>
+                      </div>
+                    )}
+                    {phase.erreurs_anticipees && phase.erreurs_anticipees.length > 0 && (
+                      <div className="rounded-md bg-amber-50 px-3 py-2">
+                        <dt className="font-semibold text-amber-900">Erreurs anticipées</dt>
+                        <dd className="mt-1">
+                          <ul className="space-y-1">
+                            {phase.erreurs_anticipees.map((e, i) => (
+                              <li key={i} className="text-amber-800">• {e}</li>
+                            ))}
+                          </ul>
+                        </dd>
+                      </div>
+                    )}
+                    {phase.relances && phase.relances.length > 0 && (
+                      <div className="rounded-md bg-slate-100 px-3 py-2">
+                        <dt className="font-semibold text-slate-900">Relances</dt>
+                        <dd className="mt-1">
+                          <ul className="space-y-1">
+                            {phase.relances.map((r, i) => (
+                              <li key={i} className="text-slate-700">→ {r}</li>
+                            ))}
+                          </ul>
+                        </dd>
+                      </div>
+                    )}
                     <div>
                       <dt className="font-semibold text-slate-950">Matériel</dt>
-                                            <dd>
+                      <dd>
                         <textarea
                           value={phase.materiel}
-                          onChange={(event) =>
-                            modifierPhaseSeanceDetaillee(index, { materiel: event.target.value })
-                          }
-                          className="mt-1 min-h-16 w-full rounded-md border border-slate-300 bg-white px-3 py-2 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
+                          onChange={(e) => modifierPhase(index, { materiel: e.target.value })}
+                          className="mt-1 min-h-12 w-full rounded-md border border-slate-300 bg-white px-3 py-2 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
                         />
                       </dd>
                     </div>
@@ -1011,9 +1055,9 @@ export default function PageAccueil() {
                 <label className="grid gap-2">
                   <span className="font-semibold text-teal-950">Trace écrite</span>
                   <textarea
-                    value={seanceDetaillee.traceEcrite}
-                    onChange={(event) =>
-                      modifierSeanceDetaillee({ ...seanceDetaillee, traceEcrite: event.target.value })
+                    value={seanceDetaillee.trace_ecrite}
+                    onChange={(e) =>
+                      modifierSeanceDetaillee({ ...seanceDetaillee, trace_ecrite: e.target.value })
                     }
                     className="min-h-28 w-full rounded-md border border-teal-200 bg-white px-3 py-2 leading-7 text-teal-950 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
                   />
@@ -1024,8 +1068,8 @@ export default function PageAccueil() {
                   <span className="font-semibold text-amber-950">Vigilance</span>
                   <textarea
                     value={seanceDetaillee.vigilance}
-                    onChange={(event) =>
-                      modifierSeanceDetaillee({ ...seanceDetaillee, vigilance: event.target.value })
+                    onChange={(e) =>
+                      modifierSeanceDetaillee({ ...seanceDetaillee, vigilance: e.target.value })
                     }
                     className="min-h-28 w-full rounded-md border border-amber-200 bg-white px-3 py-2 leading-7 text-amber-950 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
                   />
@@ -1074,5 +1118,3 @@ export default function PageAccueil() {
     </main>
   );
 }
-
-
