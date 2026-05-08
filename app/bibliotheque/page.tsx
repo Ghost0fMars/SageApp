@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { getDisciplineColor } from "../lib/discipline-colors";
 import { readUserData, writeUserData } from "../lib/user-storage";
+import FicheSeanceModal, { type SeanceDetaillee } from "../components/FicheSeanceModal";
 
 type Beat = {
   amorce: string;
@@ -29,30 +30,6 @@ type Sequence = {
   intention: string;
   regime?: string;
   seances: SeanceProgression[];
-};
-
-type PhaseSeanceDetaillee = {
-  nom: string;
-  duree_minutes: number;
-  disposition_classe: string;
-  role_enseignant: string;
-  consigne: string;
-  role_eleves: string;
-  hors_champ?: string | null;
-  erreurs_anticipees?: string[];
-  relances?: string[];
-  materiel: string;
-};
-
-type SeanceDetaillee = {
-  titre: string;
-  objectif: string;
-  niveau: string;
-  duree_minutes: number;
-  materiel: string[];
-  phases?: PhaseSeanceDetaillee[];
-  trace_ecrite?: string;
-  vigilance?: string;
 };
 
 type SequencePreparee = {
@@ -224,6 +201,7 @@ export default function BibliothequePage() {
   const [sequences, setSequences] = useState<SequencePreparee[]>([]);
   const [fiches, setFiches] = useState<SeancePreparee[]>([]);
   const [tuilesPlanning, setTuilesPlanning] = useState<TuilePlanning[]>([]);
+  const [ficheEnModal, setFicheEnModal] = useState<SeancePreparee | null>(null);
   const [message, setMessage] = useState("");
   const [preparationEnCours, setPreparationEnCours] = useState("");
 
@@ -306,6 +284,7 @@ export default function BibliothequePage() {
       const nouvellesFiches = [...fiches, fiche];
       setFiches(nouvellesFiches);
       writeUserData(PREPARED_LESSONS_STORAGE_KEY, nouvellesFiches);
+      setFicheEnModal(fiche);
       setMessage(`La fiche de séance ${seance.numero} a été préparée et enregistrée.`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Une erreur inconnue est survenue.");
@@ -394,19 +373,6 @@ export default function BibliothequePage() {
 
   function modifierLessonSauvegardee(fiche: SeancePreparee, lesson: SeanceDetaillee) {
     modifierFicheSauvegardee(fiche.id, { ...fiche, lesson });
-  }
-
-  function modifierPhaseLessonSauvegardee(
-    fiche: SeancePreparee,
-    indexPhase: number,
-    miseAJour: Partial<PhaseSeanceDetaillee>
-  ) {
-    modifierLessonSauvegardee(fiche, {
-      ...fiche.lesson,
-      phases: fiche.lesson.phases?.map((phase, index) =>
-        index === indexPhase ? { ...phase, ...miseAJour } : phase
-      )
-    });
   }
 
   function supprimerSequence(sequence: SequencePreparee) {
@@ -628,14 +594,23 @@ export default function BibliothequePage() {
                                                           </p>
                                                         </div>
                                                         {fiche ? (
-                                                          <button
-                                                            type="button"
-                                                            onClick={() => renvoyerEnReserve(fiche)}
-                                                            disabled={estReservee}
-                                                            className="rounded-md bg-teal-700 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-teal-800 disabled:cursor-not-allowed disabled:bg-slate-400"
-                                                          >
-                                                            {estReservee ? "Réservée" : "Envoyer dans la réserve"}
-                                                          </button>
+                                                          <div className="flex flex-wrap gap-2">
+                                                            <button
+                                                              type="button"
+                                                              onClick={() => setFicheEnModal(fiche)}
+                                                              className="rounded-md border border-teal-200 bg-teal-50 px-4 py-2 text-sm font-semibold text-teal-900 transition hover:bg-teal-100"
+                                                            >
+                                                              Voir la fiche
+                                                            </button>
+                                                            <button
+                                                              type="button"
+                                                              onClick={() => renvoyerEnReserve(fiche)}
+                                                              disabled={estReservee}
+                                                              className="rounded-md bg-teal-700 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-teal-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+                                                            >
+                                                              {estReservee ? "Réservée" : "Envoyer dans la réserve"}
+                                                            </button>
+                                                          </div>
                                                         ) : (
                                                           <button
                                                             type="button"
@@ -662,207 +637,6 @@ export default function BibliothequePage() {
                                                           </div>
                                                         </dl>
                                                       )}
-
-                                                      {fiche && (
-                                                        <details className="mt-4 rounded-md border border-teal-200 bg-teal-50 p-3">
-                                                          <summary className="grid cursor-pointer grid-cols-[1fr_auto] items-center gap-3 text-sm font-semibold text-teal-900">
-                                                            <span>Voir la fiche de séance</span>
-                                                            <button
-                                                              type="button"
-                                                              onClick={(e) => {
-                                                                e.preventDefault();
-                                                                e.stopPropagation();
-                                                                imprimerFiche(fiche);
-                                                              }}
-                                                              className="rounded-md bg-slate-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-slate-800"
-                                                            >
-                                                              Imprimer
-                                                            </button>
-                                                          </summary>
-                                                          <div className="mt-3 grid gap-3 text-sm leading-6 text-teal-950">
-                                                            <label className="grid gap-2">
-                                                              <span className="font-semibold">Titre</span>
-                                                              <input
-                                                                value={fiche.lesson.titre}
-                                                                onChange={(e) =>
-                                                                  modifierLessonSauvegardee(fiche, {
-                                                                    ...fiche.lesson,
-                                                                    titre: e.target.value
-                                                                  })
-                                                                }
-                                                                className="w-full rounded-md border border-teal-200 bg-white px-3 py-2 font-semibold outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
-                                                              />
-                                                            </label>
-                                                            <label className="grid gap-2">
-                                                              <span className="font-semibold">Objectif</span>
-                                                              <textarea
-                                                                value={fiche.lesson.objectif}
-                                                                onChange={(e) =>
-                                                                  modifierLessonSauvegardee(fiche, {
-                                                                    ...fiche.lesson,
-                                                                    objectif: e.target.value
-                                                                  })
-                                                                }
-                                                                className="min-h-16 w-full rounded-md border border-teal-200 bg-white px-3 py-2 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
-                                                              />
-                                                            </label>
-                                                            <label className="grid gap-2">
-                                                              <span className="font-semibold">Durée (min)</span>
-                                                              <input
-                                                                type="number"
-                                                                value={fiche.lesson.duree_minutes}
-                                                                onChange={(e) =>
-                                                                  modifierLessonSauvegardee(fiche, {
-                                                                    ...fiche.lesson,
-                                                                    duree_minutes: Number(e.target.value) || fiche.lesson.duree_minutes
-                                                                  })
-                                                                }
-                                                                className="w-24 rounded-md border border-teal-200 bg-white px-3 py-2 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
-                                                              />
-                                                            </label>
-                                                            <label className="grid gap-2">
-                                                              <span className="font-semibold">Matériel</span>
-                                                              <textarea
-                                                                value={fiche.lesson.materiel?.join("\n") ?? ""}
-                                                                onChange={(e) =>
-                                                                  modifierLessonSauvegardee(fiche, {
-                                                                    ...fiche.lesson,
-                                                                    materiel: e.target.value.split("\n").filter(Boolean)
-                                                                  })
-                                                                }
-                                                                className="min-h-16 w-full rounded-md border border-teal-200 bg-white px-3 py-2 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
-                                                                placeholder="Un élément par ligne"
-                                                              />
-                                                            </label>
-
-                                                            {fiche.lesson.phases?.map((phase, index) => (
-                                                              <div
-                                                                key={`${fiche.id}-${index}-${phase.nom}`}
-                                                                className="rounded-md border border-teal-200 bg-white p-3"
-                                                              >
-                                                                <label className="grid gap-2">
-                                                                  <span className="font-semibold text-slate-950">
-                                                                    Phase {index + 1}
-                                                                  </span>
-                                                                  <input
-                                                                    value={phase.nom}
-                                                                    onChange={(e) =>
-                                                                      modifierPhaseLessonSauvegardee(fiche, index, {
-                                                                        nom: e.target.value
-                                                                      })
-                                                                    }
-                                                                    className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 font-semibold text-slate-950 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
-                                                                  />
-                                                                </label>
-                                                                <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                                                                  <input
-                                                                    type="number"
-                                                                    value={phase.duree_minutes}
-                                                                    onChange={(e) =>
-                                                                      modifierPhaseLessonSauvegardee(fiche, index, {
-                                                                        duree_minutes: Number(e.target.value) || phase.duree_minutes
-                                                                      })
-                                                                    }
-                                                                    className="rounded-md border border-slate-300 bg-white px-3 py-2 text-slate-600 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
-                                                                  />
-                                                                  <input
-                                                                    value={phase.disposition_classe}
-                                                                    onChange={(e) =>
-                                                                      modifierPhaseLessonSauvegardee(fiche, index, {
-                                                                        disposition_classe: e.target.value
-                                                                      })
-                                                                    }
-                                                                    className="rounded-md border border-slate-300 bg-white px-3 py-2 text-slate-600 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
-                                                                  />
-                                                                </div>
-                                                                <label className="mt-2 grid gap-2">
-                                                                  <span className="font-semibold">Rôle enseignant</span>
-                                                                  <textarea
-                                                                    value={phase.role_enseignant}
-                                                                    onChange={(e) =>
-                                                                      modifierPhaseLessonSauvegardee(fiche, index, {
-                                                                        role_enseignant: e.target.value
-                                                                      })
-                                                                    }
-                                                                    className="min-h-16 w-full rounded-md border border-slate-300 bg-white px-3 py-2 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
-                                                                  />
-                                                                </label>
-                                                                <label className="grid gap-2">
-                                                                  <span className="font-semibold">Consigne</span>
-                                                                  <textarea
-                                                                    value={phase.consigne}
-                                                                    onChange={(e) =>
-                                                                      modifierPhaseLessonSauvegardee(fiche, index, {
-                                                                        consigne: e.target.value
-                                                                      })
-                                                                    }
-                                                                    className="min-h-16 w-full rounded-md border border-slate-300 bg-white px-3 py-2 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
-                                                                  />
-                                                                </label>
-                                                                <label className="grid gap-2">
-                                                                  <span className="font-semibold">Activité élèves</span>
-                                                                  <textarea
-                                                                    value={phase.role_eleves}
-                                                                    onChange={(e) =>
-                                                                      modifierPhaseLessonSauvegardee(fiche, index, {
-                                                                        role_eleves: e.target.value
-                                                                      })
-                                                                    }
-                                                                    className="min-h-16 w-full rounded-md border border-slate-300 bg-white px-3 py-2 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
-                                                                  />
-                                                                </label>
-                                                                {phase.hors_champ && (
-                                                                  <div className="mt-2 rounded-md bg-blue-50 px-3 py-2 text-sm text-blue-900">
-                                                                    <span className="font-semibold">Hors-champ : </span>
-                                                                    {phase.hors_champ}
-                                                                  </div>
-                                                                )}
-                                                                {phase.erreurs_anticipees?.length ? (
-                                                                  <div className="mt-2 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900">
-                                                                    <span className="font-semibold block">Erreurs anticipées</span>
-                                                                    <ul className="mt-1 space-y-0.5">
-                                                                      {phase.erreurs_anticipees.map((err, i) => (
-                                                                        <li key={i}>• {err}</li>
-                                                                      ))}
-                                                                    </ul>
-                                                                  </div>
-                                                                ) : null}
-                                                              </div>
-                                                            ))}
-
-                                                            {fiche.lesson.trace_ecrite && (
-                                                              <label className="grid gap-2">
-                                                                <span className="font-semibold">Trace écrite</span>
-                                                                <textarea
-                                                                  value={fiche.lesson.trace_ecrite}
-                                                                  onChange={(e) =>
-                                                                    modifierLessonSauvegardee(fiche, {
-                                                                      ...fiche.lesson,
-                                                                      trace_ecrite: e.target.value
-                                                                    })
-                                                                  }
-                                                                  className="min-h-24 w-full rounded-md border border-teal-200 bg-white px-3 py-2 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
-                                                                />
-                                                              </label>
-                                                            )}
-                                                            {fiche.lesson.vigilance && (
-                                                              <label className="grid gap-2">
-                                                                <span className="font-semibold">Vigilance</span>
-                                                                <textarea
-                                                                  value={fiche.lesson.vigilance}
-                                                                  onChange={(e) =>
-                                                                    modifierLessonSauvegardee(fiche, {
-                                                                      ...fiche.lesson,
-                                                                      vigilance: e.target.value
-                                                                    })
-                                                                  }
-                                                                  className="min-h-24 w-full rounded-md border border-teal-200 bg-white px-3 py-2 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
-                                                                />
-                                                              </label>
-                                                            )}
-                                                          </div>
-                                                        </details>
-                                                      )}
                                                     </article>
                                                   );
                                                 })}
@@ -886,6 +660,42 @@ export default function BibliothequePage() {
           ))}
         </div>
       </section>
+
+      {ficheEnModal && (
+        <FicheSeanceModal
+          open={!!ficheEnModal}
+          lesson={ficheEnModal.lesson}
+          onClose={() => setFicheEnModal(null)}
+          onSave={(updated) => {
+            modifierLessonSauvegardee(ficheEnModal, updated);
+            setFicheEnModal({ ...ficheEnModal, lesson: updated });
+          }}
+          actions={
+            <>
+              <button
+                type="button"
+                onClick={() => imprimerFiche(ficheEnModal)}
+                className="rounded-md bg-slate-900 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-300"
+              >
+                Imprimer
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  renvoyerEnReserve(ficheEnModal);
+                  setFicheEnModal(null);
+                }}
+                disabled={tuilesPlanning.some((t) => t.preparedLessonId === ficheEnModal.id)}
+                className="rounded-md bg-teal-700 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-teal-800 focus:outline-none focus:ring-2 focus:ring-teal-300 disabled:cursor-not-allowed disabled:bg-slate-400"
+              >
+                {tuilesPlanning.some((t) => t.preparedLessonId === ficheEnModal.id)
+                  ? "Réservée"
+                  : "Envoyer dans la réserve"}
+              </button>
+            </>
+          }
+        />
+      )}
     </main>
   );
 }

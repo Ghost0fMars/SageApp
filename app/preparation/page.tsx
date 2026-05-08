@@ -5,6 +5,7 @@ import referentielBrut from "../../Référentiel_de_compétences.json";
 import { readUserData, writeUserData } from "../lib/user-storage";
 import { readAiConfig } from "../lib/ai-config";
 import { supabase } from "../lib/supabase-client";
+import FicheSeanceModal from "../components/FicheSeanceModal";
 
 type LigneReferentielBrute = {
   Cycle: string;
@@ -205,6 +206,7 @@ export default function PagePreparation() {
   const [seancePrepareeId, setSeancePrepareeId] = useState("");
   const [seanceEnReserve, setSeanceEnReserve] = useState(false);
   const [messagePlanning, setMessagePlanning] = useState("");
+  const [modalOuvert, setModalOuvert] = useState(false);
   const [erreur, setErreur] = useState("");
   const [generationEnCours, setGenerationEnCours] = useState(false);
   const [sequenceEnCours, setSequenceEnCours] = useState(false);
@@ -467,6 +469,7 @@ export default function PagePreparation() {
 
       setSeanceDetaillee(data.seance);
       setSeanceSource(seance);
+      setModalOuvert(true);
 
       if (sequence) {
         const id = crypto.randomUUID();
@@ -574,19 +577,57 @@ export default function PagePreparation() {
     );
   }
 
-  function modifierPhase(indexPhase: number, miseAJour: Partial<PhaseSeanceDetaillee>) {
+  function imprimerSeance() {
     if (!seanceDetaillee) return;
-    modifierSeanceDetaillee({
-      ...seanceDetaillee,
-      phases: seanceDetaillee.phases.map((phase, index) =>
-        index === indexPhase ? { ...phase, ...miseAJour } : phase
+    const fenetre = window.open("", "_blank", "width=900,height=700");
+    if (!fenetre) return;
+    const e = (s: string) =>
+      s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const phasesHtml = seanceDetaillee.phases
+      .map(
+        (phase, i) => `
+        <section class="phase">
+          <h2>Phase ${i + 1} — ${e(phase.nom)}</h2>
+          <p class="meta">${[`${phase.duree_minutes} min`, phase.disposition_classe].filter(Boolean).map(e).join(" · ")}</p>
+          ${phase.role_enseignant ? `<h3>Rôle enseignant</h3><p>${e(phase.role_enseignant)}</p>` : ""}
+          ${phase.consigne ? `<h3>Consigne</h3><p>${e(phase.consigne)}</p>` : ""}
+          ${phase.role_eleves ? `<h3>Activité élèves</h3><p>${e(phase.role_eleves)}</p>` : ""}
+          ${phase.hors_champ ? `<h3>Hors-champ</h3><p>${e(phase.hors_champ)}</p>` : ""}
+          ${phase.erreurs_anticipees?.length ? `<h3>Erreurs anticipées</h3><ul>${phase.erreurs_anticipees.map((err) => `<li>${e(err)}</li>`).join("")}</ul>` : ""}
+          ${phase.relances?.length ? `<h3>Relances</h3><ul>${phase.relances.map((r) => `<li>${e(r)}</li>`).join("")}</ul>` : ""}
+          ${phase.materiel ? `<h3>Matériel</h3><p>${e(phase.materiel)}</p>` : ""}
+        </section>`
       )
-    });
-  }
-
-  function exporterSeancePdf() {
-    if (!seanceDetaillee) return;
-    window.print();
+      .join("");
+    fenetre.document.write(`<!DOCTYPE html>
+<html lang="fr"><head><meta charset="UTF-8"><title>${e(seanceDetaillee.titre)}</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Georgia, serif; font-size: 11pt; line-height: 1.6; color: #111; padding: 2cm 2.5cm; }
+  h1 { font-size: 18pt; font-weight: bold; margin-bottom: 4pt; }
+  h2 { font-size: 13pt; font-weight: bold; margin: 18pt 0 4pt; border-bottom: 1px solid #ccc; padding-bottom: 3pt; }
+  h3 { font-size: 10pt; font-weight: bold; text-transform: uppercase; letter-spacing: .04em; margin: 10pt 0 2pt; color: #444; }
+  p { margin-bottom: 6pt; white-space: pre-wrap; }
+  ul { margin: 4pt 0 6pt 1.2em; } li { margin-bottom: 2pt; }
+  .subtitle { font-size: 10pt; color: #555; margin-bottom: 14pt; }
+  .meta { font-size: 9pt; color: #666; margin-bottom: 6pt; font-style: italic; }
+  .intro { margin-bottom: 16pt; padding-bottom: 12pt; border-bottom: 2px solid #111; }
+  .phase { margin-top: 12pt; break-inside: avoid; }
+  @media print { body { padding: 1.5cm 2cm; } }
+</style></head><body>
+  <div class="intro">
+    <h1>${e(seanceDetaillee.titre)}</h1>
+    <p class="subtitle">${[seanceSource ? `Séance ${seanceSource.numero}` : "", seanceDetaillee.niveau, `${seanceDetaillee.duree_minutes} min`].filter(Boolean).map(e).join(" · ")}</p>
+    ${seanceDetaillee.objectif ? `<h3>Objectif</h3><p>${e(seanceDetaillee.objectif)}</p>` : ""}
+    ${seanceDetaillee.materiel?.length ? `<h3>Matériel</h3><p>${seanceDetaillee.materiel.map(e).join(", ")}</p>` : ""}
+  </div>
+  ${phasesHtml}
+  ${seanceDetaillee.trace_ecrite ? `<div style="margin-top:14pt;break-inside:avoid"><h2>Trace écrite</h2><p>${e(seanceDetaillee.trace_ecrite)}</p></div>` : ""}
+  ${seanceDetaillee.vigilance ? `<div style="margin-top:14pt;break-inside:avoid"><h2>Vigilance</h2><p>${e(seanceDetaillee.vigilance)}</p></div>` : ""}
+</body></html>`);
+    fenetre.document.close();
+    fenetre.focus();
+    fenetre.print();
   }
 
   function planifierSeance() {
@@ -864,255 +905,46 @@ export default function PagePreparation() {
         )}
 
         {seanceDetaillee && (
-          <section
-            id="seance-a-imprimer"
-            className="mt-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm print:border-0 print:shadow-none"
-          >
-            <div className="border-b border-slate-200 pb-4">
-              <p className="text-sm font-semibold uppercase tracking-wide text-teal-700">
-                Séance préparée
-              </p>
-              <label className="mt-2 grid gap-2">
-                <span className="text-sm font-semibold text-slate-700">Titre de la séance</span>
-                <input
-                  value={seanceDetaillee.titre}
-                  onChange={(e) =>
-                    modifierSeanceDetaillee({ ...seanceDetaillee, titre: e.target.value })
-                  }
-                  className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-2xl font-bold text-slate-950 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
-                />
-              </label>
-              <label className="mt-3 grid gap-2">
-                <span className="text-sm font-semibold text-slate-700">Objectif de la séance</span>
-                <textarea
-                  value={seanceDetaillee.objectif}
-                  onChange={(e) =>
-                    modifierSeanceDetaillee({ ...seanceDetaillee, objectif: e.target.value })
-                  }
-                  className="min-h-20 w-full rounded-md border border-slate-300 bg-white px-3 py-2 leading-7 text-slate-700 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
-                />
-              </label>
-              <div className="mt-3 flex flex-wrap gap-2 text-sm text-slate-700">
-                <label className="grid gap-1 rounded-md bg-slate-100 px-3 py-2">
-                  <span className="text-xs font-semibold text-slate-500">Niveau</span>
-                  <input
-                    value={seanceDetaillee.niveau}
-                    onChange={(e) =>
-                      modifierSeanceDetaillee({ ...seanceDetaillee, niveau: e.target.value })
-                    }
-                    className="min-w-0 bg-transparent text-sm font-semibold outline-none"
-                  />
-                </label>
-                <label className="grid gap-1 rounded-md bg-slate-100 px-3 py-2">
-                  <span className="text-xs font-semibold text-slate-500">Durée (min)</span>
-                  <input
-                    type="number"
-                    value={seanceDetaillee.duree_minutes}
-                    onChange={(e) =>
-                      modifierSeanceDetaillee({
-                        ...seanceDetaillee,
-                        duree_minutes: Number(e.target.value) || seanceDetaillee.duree_minutes
-                      })
-                    }
-                    className="min-w-0 w-20 bg-transparent text-sm font-semibold outline-none"
-                  />
-                </label>
-              </div>
-              <label className="mt-3 grid gap-2 text-sm leading-6 text-slate-700">
-                <span className="font-semibold text-slate-950">Matériel</span>
-                <textarea
-                  value={seanceDetaillee.materiel.join("\n")}
-                  onChange={(e) =>
-                    modifierSeanceDetaillee({
-                      ...seanceDetaillee,
-                      materiel: e.target.value.split("\n").filter(Boolean)
-                    })
-                  }
-                  className="min-h-16 w-full rounded-md border border-slate-300 bg-white px-3 py-2 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
-                  placeholder="Un élément par ligne"
-                />
-              </label>
-            </div>
-
-            <div className="mt-5 grid gap-4">
-              {seanceDetaillee.phases.map((phase, index) => (
-                <article
-                  key={`${index}-${phase.nom}`}
-                  className="rounded-md border border-slate-200 bg-slate-50 p-4"
+          <FicheSeanceModal
+            open={modalOuvert}
+            lesson={seanceDetaillee}
+            onClose={() => setModalOuvert(false)}
+            onSave={modifierSeanceDetaillee}
+            actions={
+              <>
+                {messagePlanning && (
+                  <p className="w-full text-sm text-teal-700">{messagePlanning}</p>
+                )}
+                <button
+                  type="button"
+                  onClick={imprimerSeance}
+                  className="rounded-md bg-slate-900 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-300"
                 >
-                  <div className="flex flex-wrap items-center gap-3">
-                    <span className="rounded-full bg-slate-900 px-3 py-1 text-sm font-semibold text-white">
-                      Phase {index + 1}
-                    </span>
-                    <input
-                      type="number"
-                      value={phase.duree_minutes}
-                      onChange={(e) =>
-                        modifierPhase(index, {
-                          duree_minutes: Number(e.target.value) || phase.duree_minutes
-                        })
-                      }
-                      className="w-20 rounded-md border border-slate-300 bg-white px-2 py-1 text-sm font-medium text-slate-600 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
-                    />
-                    <input
-                      value={phase.disposition_classe}
-                      onChange={(e) =>
-                        modifierPhase(index, { disposition_classe: e.target.value })
-                      }
-                      className="min-w-40 flex-1 rounded-md border border-slate-300 bg-white px-2 py-1 text-sm font-medium text-slate-600 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
-                    />
-                  </div>
-
-                  <label className="mt-3 grid gap-2">
-                    <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Titre de phase</span>
-                    <input
-                      value={phase.nom}
-                      onChange={(e) => modifierPhase(index, { nom: e.target.value })}
-                      className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-lg font-semibold text-slate-950 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
-                    />
-                  </label>
-
-                  <dl className="mt-3 grid gap-3 text-sm leading-6 text-slate-800">
-                    <div>
-                      <dt className="font-semibold text-slate-950">Rôle de l'enseignant</dt>
-                      <dd>
-                        <textarea
-                          value={phase.role_enseignant}
-                          onChange={(e) =>
-                            modifierPhase(index, { role_enseignant: e.target.value })
-                          }
-                          className="mt-1 min-h-20 w-full rounded-md border border-slate-300 bg-white px-3 py-2 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
-                        />
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="font-semibold text-slate-950">Consigne</dt>
-                      <dd>
-                        <textarea
-                          value={phase.consigne}
-                          onChange={(e) => modifierPhase(index, { consigne: e.target.value })}
-                          className="mt-1 min-h-16 w-full rounded-md border border-slate-300 bg-white px-3 py-2 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
-                        />
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="font-semibold text-slate-950">Activité des élèves</dt>
-                      <dd>
-                        <textarea
-                          value={phase.role_eleves}
-                          onChange={(e) => modifierPhase(index, { role_eleves: e.target.value })}
-                          className="mt-1 min-h-20 w-full rounded-md border border-slate-300 bg-white px-3 py-2 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
-                        />
-                      </dd>
-                    </div>
-                    {phase.hors_champ && (
-                      <div className="rounded-md bg-blue-50 px-3 py-2">
-                        <dt className="font-semibold text-blue-900">Hors-champ</dt>
-                        <dd className="mt-1 text-blue-800">{phase.hors_champ}</dd>
-                      </div>
-                    )}
-                    {phase.erreurs_anticipees && phase.erreurs_anticipees.length > 0 && (
-                      <div className="rounded-md bg-amber-50 px-3 py-2">
-                        <dt className="font-semibold text-amber-900">Erreurs anticipées</dt>
-                        <dd className="mt-1">
-                          <ul className="space-y-1">
-                            {phase.erreurs_anticipees.map((e, i) => (
-                              <li key={i} className="text-amber-800">• {e}</li>
-                            ))}
-                          </ul>
-                        </dd>
-                      </div>
-                    )}
-                    {phase.relances && phase.relances.length > 0 && (
-                      <div className="rounded-md bg-slate-100 px-3 py-2">
-                        <dt className="font-semibold text-slate-900">Relances</dt>
-                        <dd className="mt-1">
-                          <ul className="space-y-1">
-                            {phase.relances.map((r, i) => (
-                              <li key={i} className="text-slate-700">→ {r}</li>
-                            ))}
-                          </ul>
-                        </dd>
-                      </div>
-                    )}
-                    <div>
-                      <dt className="font-semibold text-slate-950">Matériel</dt>
-                      <dd>
-                        <textarea
-                          value={phase.materiel}
-                          onChange={(e) => modifierPhase(index, { materiel: e.target.value })}
-                          className="mt-1 min-h-12 w-full rounded-md border border-slate-300 bg-white px-3 py-2 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
-                        />
-                      </dd>
-                    </div>
-                  </dl>
-                </article>
-              ))}
-            </div>
-
-            <div className="mt-5 grid gap-4 md:grid-cols-2">
-              <div className="rounded-md border border-teal-200 bg-teal-50 p-4">
-                <label className="grid gap-2">
-                  <span className="font-semibold text-teal-950">Trace écrite</span>
-                  <textarea
-                    value={seanceDetaillee.trace_ecrite}
-                    onChange={(e) =>
-                      modifierSeanceDetaillee({ ...seanceDetaillee, trace_ecrite: e.target.value })
-                    }
-                    className="min-h-28 w-full rounded-md border border-teal-200 bg-white px-3 py-2 leading-7 text-teal-950 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
-                  />
-                </label>
-              </div>
-              <div className="rounded-md border border-amber-200 bg-amber-50 p-4">
-                <label className="grid gap-2">
-                  <span className="font-semibold text-amber-950">Vigilance</span>
-                  <textarea
-                    value={seanceDetaillee.vigilance}
-                    onChange={(e) =>
-                      modifierSeanceDetaillee({ ...seanceDetaillee, vigilance: e.target.value })
-                    }
-                    className="min-h-28 w-full rounded-md border border-amber-200 bg-white px-3 py-2 leading-7 text-amber-950 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
-                  />
-                </label>
-              </div>
-            </div>
-
-            {messagePlanning && (
-              <div className="mt-5 rounded-md border border-teal-200 bg-teal-50 p-4">
-                <p className="leading-7 text-teal-950">{messagePlanning}</p>
-              </div>
-            )}
-
-            <div className="mt-5 flex flex-wrap gap-3 print:hidden">
-              <button
-                type="button"
-                onClick={exporterSeancePdf}
-                className="rounded-md bg-slate-900 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-300"
-              >
-                Exporter en PDF
-              </button>
-              <button
-                type="button"
-                onClick={planifierSeance}
-                disabled={seanceEnReserve}
-                className="rounded-md bg-teal-700 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-teal-800 focus:outline-none focus:ring-2 focus:ring-teal-300 disabled:cursor-not-allowed disabled:bg-slate-400"
-              >
-                {seanceEnReserve ? "Réservée" : "Planifier"}
-              </button>
-              <a
-                href="/planning"
-                className="rounded-md border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-900 shadow-sm transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-300"
-              >
-                Ouvrir le planning
-              </a>
-              <a
-                href="/bibliotheque"
-                className="rounded-md border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-900 shadow-sm transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-300"
-              >
-                Voir la bibliothèque
-              </a>
-            </div>
-          </section>
+                  Exporter en PDF
+                </button>
+                <button
+                  type="button"
+                  onClick={planifierSeance}
+                  disabled={seanceEnReserve}
+                  className="rounded-md bg-teal-700 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-teal-800 focus:outline-none focus:ring-2 focus:ring-teal-300 disabled:cursor-not-allowed disabled:bg-slate-400"
+                >
+                  {seanceEnReserve ? "Réservée" : "Planifier"}
+                </button>
+                <a
+                  href="/planning"
+                  className="rounded-md border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-900 shadow-sm transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-300"
+                >
+                  Ouvrir le planning
+                </a>
+                <a
+                  href="/bibliotheque"
+                  className="rounded-md border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-900 shadow-sm transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-300"
+                >
+                  Voir la bibliothèque
+                </a>
+              </>
+            }
+          />
         )}
       </section>
     </main>
