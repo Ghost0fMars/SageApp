@@ -23,7 +23,7 @@ export default function RootShell({ children }: { children: React.ReactNode }) {
   return (
     <CloudSyncProvider>
       <ServiceWorkerRegister />
-      <AiConfigModal open={showAiModal} onClose={() => setShowAiModal(false)} />
+      <AiConfigModal open={showAiModal && !withoutSidebar} onClose={() => setShowAiModal(false)} />
       {withoutSidebar ? children : <AppShell>{children}</AppShell>}
     </CloudSyncProvider>
   );
