@@ -55,6 +55,7 @@ const PROVIDERS: ProviderOption[] = [
 type Props = {
   open: boolean;
   onClose: () => void;
+  freeLimitReached?: boolean;
 };
 
 export function AiConfigForm({ onSaved }: { onSaved?: () => void }) {
@@ -185,7 +186,7 @@ export function AiConfigForm({ onSaved }: { onSaved?: () => void }) {
   );
 }
 
-export default function AiConfigModal({ open, onClose }: Props) {
+export default function AiConfigModal({ open, onClose, freeLimitReached }: Props) {
   if (!open) return null;
 
   return (
@@ -213,22 +214,32 @@ export default function AiConfigModal({ open, onClose }: Props) {
             <div>
               <h2 className="text-base font-bold text-white">Configurer l&apos;assistant IA</h2>
               <p className="mt-0.5 text-xs text-white/70">
-                Connectez votre propre clé API pour utiliser les fonctionnalités IA
+                {freeLimitReached
+                  ? "Vous avez utilisé vos 3 générations gratuites"
+                  : "Connectez votre propre clé API pour utiliser les fonctionnalités IA"}
               </p>
             </div>
           </div>
         </div>
 
         <div className="px-6 py-5">
+          {freeLimitReached && (
+            <p className="mb-4 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2.5 text-sm text-amber-900">
+              Pour continuer à générer des séquences, connectez votre propre clé API ci-dessous. C&apos;est gratuit à créer.
+            </p>
+          )}
+
           <AiConfigForm onSaved={onClose} />
 
-          <button
-            type="button"
-            onClick={onClose}
-            className="mt-3 w-full py-2 text-sm text-slate-400 transition hover:text-slate-600"
-          >
-            Configurer plus tard
-          </button>
+          {!freeLimitReached && (
+            <button
+              type="button"
+              onClick={onClose}
+              className="mt-3 w-full py-2 text-sm text-slate-400 transition hover:text-slate-600"
+            >
+              Configurer plus tard
+            </button>
+          )}
         </div>
       </div>
     </div>

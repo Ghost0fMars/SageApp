@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import referentielBrut from "../../Référentiel_de_compétences.json";
 import { readUserData, writeUserData } from "../lib/user-storage";
 import { readAiConfig } from "../lib/ai-config";
+import { supabase } from "../lib/supabase-client";
 
 // TypeScript décrit ici la forme d'une ligne du fichier JSON d'origine.
 type LigneReferentielBrute = {
@@ -366,10 +367,15 @@ export default function PageAccueil() {
 
     try {
       const aiConfig = readAiConfig();
+      const token = !aiConfig && supabase
+        ? (await supabase.auth.getSession()).data.session?.access_token
+        : null;
+
       const response = await fetch("/api/generate-sequence", {
         method: "POST",
         headers: {
-          "Content-Type": "application/json"
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
         },
         body: JSON.stringify({
           cycle: selection.cycle,
@@ -385,6 +391,11 @@ export default function PageAccueil() {
       });
 
       const data = (await response.json()) as { sequence?: Sequence; error?: string };
+
+      if (response.status === 403 && data.error === "FREE_LIMIT_REACHED") {
+        window.dispatchEvent(new CustomEvent("open-ai-config", { detail: { freeLimitReached: true } }));
+        throw new Error("Vous avez utilisé vos 3 générations gratuites.");
+      }
 
       if (!response.ok || !data.sequence) {
         throw new Error(data.error ?? "Impossible de générer la séquence.");

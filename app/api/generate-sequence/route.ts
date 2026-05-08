@@ -1,5 +1,10 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { callAiProvider, type AiProvider } from "../../lib/ai-provider";
+import {
+  getUserFromRequest,
+  checkAndIncrementFreeGenerations,
+  FREE_GENERATIONS_MAX
+} from "../../lib/supabase-server";
 
 type GenerateSequenceRequest = {
   aiProvider?: string;
@@ -124,7 +129,7 @@ Réponds uniquement avec un JSON valide, sans Markdown, au format suivant :
 `;
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   const body = (await request.json()) as GenerateSequenceRequest;
   const { aiProvider, aiApiKey, ...contexte } = body;
 
@@ -186,6 +191,17 @@ export async function POST(request: Request) {
       },
       { status: 400 }
     );
+  }
+
+  const user = await getUserFromRequest(request);
+  if (user) {
+    const { allowed, used } = await checkAndIncrementFreeGenerations(user.id);
+    if (!allowed) {
+      return NextResponse.json(
+        { error: "FREE_LIMIT_REACHED", generationsUsed: used, generationsMax: FREE_GENERATIONS_MAX },
+        { status: 403 }
+      );
+    }
   }
 
   const apiKey = process.env.OPENAI_API_KEY;
