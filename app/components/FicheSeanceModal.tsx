@@ -10,8 +10,8 @@ type PhaseSeanceDetaillee = {
   consigne: string;
   role_eleves: string;
   hors_champ: string | null;
-  erreurs_anticipees?: string[];
-  relances?: string[];
+  erreurs_anticipees: string[];
+  relances: string[];
   materiel: string;
 };
 
