@@ -68,8 +68,8 @@ export default function FicheSeanceModal({ open, lesson, onClose, onSave, action
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 backdrop-blur-sm">
-      <div className="relative my-4 w-full max-w-3xl rounded-2xl bg-white shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+      <div className="relative flex w-full max-w-3xl flex-col rounded-2xl bg-white shadow-2xl max-h-[90vh]">
 
         {/* Header */}
         <div className="sticky top-0 z-10 flex items-start justify-between gap-4 rounded-t-2xl border-b border-slate-200 bg-white px-6 py-4">
@@ -92,7 +92,7 @@ export default function FicheSeanceModal({ open, lesson, onClose, onSave, action
         </div>
 
         {/* Body */}
-        <div className="px-6 py-5">
+        <div className="flex-1 overflow-y-auto px-6 py-5">
 
           {/* Titre + méta */}
           <label className="grid gap-2">
