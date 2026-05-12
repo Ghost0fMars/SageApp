@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { callAiProvider, type AiProvider } from "../../lib/ai-provider";
+import { lireObjetJsonIa } from "../../lib/ai-json";
 import {
   getUserFromRequest,
   checkAndIncrementFreeGenerations,
@@ -69,15 +70,6 @@ function extraireTexteOpenAI(data: OpenAIResponse) {
       .find((content) => content.type === "output_text")
       ?.text?.trim() ?? ""
   );
-}
-
-function extraireJson(texte: string) {
-  const debut = texte.indexOf("{");
-  const fin = texte.lastIndexOf("}");
-  if (debut === -1 || fin === -1) {
-    throw new Error("La réponse de l'IA ne contient pas de JSON.");
-  }
-  return JSON.parse(texte.slice(debut, fin + 1)) as Sequence;
 }
 
 function sequenceValide(sequence: Sequence): boolean {
@@ -252,7 +244,7 @@ export async function POST(request: NextRequest) {
   const prompt = buildPrompt(contexte, regime);
 
   function parseSequence(texte: string) {
-    const sequence = extraireJson(texte);
+    const sequence = lireObjetJsonIa<Sequence>(texte);
     if (!sequenceValide(sequence)) {
       throw new Error(
         "La séquence générée est incomplète : vérifier la structure beat et la présence d'une séance de clôture."
@@ -279,7 +271,7 @@ export async function POST(request: NextRequest) {
           error: error instanceof Error ? error.message : "Erreur lors de l'appel à l'IA.",
           details: ""
         },
-        { status: error instanceof SyntaxError ? 502 : 500 }
+        { status: 502 }
       );
     }
   }

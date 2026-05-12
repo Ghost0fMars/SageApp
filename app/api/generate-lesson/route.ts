@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { callAiProvider, type AiProvider } from "../../lib/ai-provider";
+import { lireObjetJsonIa } from "../../lib/ai-json";
 
 type BeatInput = {
   amorce?: string;
@@ -77,15 +78,6 @@ function extraireTexteOpenAI(data: OpenAIResponse) {
       .find((content) => content.type === "output_text")
       ?.text?.trim() ?? ""
   );
-}
-
-function extraireJson(texte: string) {
-  const debut = texte.indexOf("{");
-  const fin = texte.lastIndexOf("}");
-  if (debut === -1 || fin === -1) {
-    throw new Error("La réponse de l'IA ne contient pas de JSON.");
-  }
-  return JSON.parse(texte.slice(debut, fin + 1)) as SeanceDetaillee;
 }
 
 function seanceValide(seance: SeanceDetaillee) {
@@ -226,7 +218,7 @@ export async function POST(request: Request) {
   const prompt = buildPrompt(contexte);
 
   function parseSeance(texte: string) {
-    const seance = extraireJson(texte);
+    const seance = lireObjetJsonIa<SeanceDetaillee>(texte);
     if (!seanceValide(seance)) {
       throw new Error("La séance générée est incomplète.");
     }
