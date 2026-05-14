@@ -17,6 +17,8 @@ const DEFAULT_USER: LocalUser = {
 export const SYNCED_DATA_KEYS = [
   "sage-planning-tiles",
   "sage-prepared-lessons",
+  "sage-student-activities",
+  "sage-course-presentations",
   "sage-sequences",
   "sage-students",
   "sage-events",

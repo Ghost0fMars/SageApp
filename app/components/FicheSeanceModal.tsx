@@ -32,9 +32,23 @@ type Props = {
   onClose: () => void;
   onSave: (updated: SeanceDetaillee) => void;
   actions?: React.ReactNode;
+  onGenerateStudentActivity?: (lesson: SeanceDetaillee) => void;
+  studentActivityLoading?: boolean;
+  onGenerateCourse?: (lesson: SeanceDetaillee) => void;
+  courseLoading?: boolean;
 };
 
-export default function FicheSeanceModal({ open, lesson, onClose, onSave, actions }: Props) {
+export default function FicheSeanceModal({
+  open,
+  lesson,
+  onClose,
+  onSave,
+  actions,
+  onGenerateStudentActivity,
+  studentActivityLoading = false,
+  onGenerateCourse,
+  courseLoading = false
+}: Props) {
   const [local, setLocal] = useState<SeanceDetaillee>(lesson);
 
   useEffect(() => {
@@ -286,11 +300,27 @@ export default function FicheSeanceModal({ open, lesson, onClose, onSave, action
         </div>
 
         {/* Footer */}
-        {actions && (
-          <div className="sticky bottom-0 flex flex-wrap gap-3 rounded-b-2xl border-t border-slate-200 bg-white px-6 py-4">
-            {actions}
+        <div className="sticky bottom-0 flex flex-wrap items-center justify-between gap-3 rounded-b-2xl border-t border-slate-200 bg-white px-6 py-4">
+          <div className="flex flex-wrap gap-3">{actions}</div>
+          <div className="ml-auto flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={() => onGenerateStudentActivity?.(local)}
+              disabled={!onGenerateStudentActivity || studentActivityLoading}
+              className="rounded-md border border-teal-200 bg-teal-50 px-4 py-3 text-sm font-semibold text-teal-900 shadow-sm transition hover:bg-teal-100 focus:outline-none focus:ring-2 focus:ring-teal-200"
+            >
+              {studentActivityLoading ? "Génération..." : "Fiche élève"}
+            </button>
+            <button
+              type="button"
+              onClick={() => onGenerateCourse?.(local)}
+              disabled={!onGenerateCourse || courseLoading}
+              className="rounded-md border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-900 shadow-sm transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-300"
+            >
+              {courseLoading ? "Génération..." : "Cours"}
+            </button>
           </div>
-        )}
+        </div>
       </div>
     </div>
   );

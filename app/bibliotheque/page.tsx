@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { getDisciplineColor } from "../lib/discipline-colors";
+import { readAiConfig } from "../lib/ai-config";
 import { readUserData, writeUserData } from "../lib/user-storage";
 import FicheSeanceModal, { type SeanceDetaillee } from "../components/FicheSeanceModal";
 
@@ -61,6 +62,70 @@ type SeancePreparee = {
   lesson: SeanceDetaillee;
 };
 
+type FicheActiviteEleve = {
+  titre: string;
+  niveau: string;
+  objectif: string;
+  consigne: string;
+  support: string;
+  activites: {
+    titre: string;
+    consigne: string;
+    format_reponse: string;
+    aides: string[];
+  }[];
+  differenciation: {
+    soutien: string;
+    approfondissement: string;
+  };
+  correction: string[];
+};
+
+type ActiviteEleveSauvegardee = {
+  id: string;
+  createdAt: string;
+  preparedLessonId?: string;
+  cycle: string;
+  niveau: string;
+  domaine: string;
+  sousDomaine: string;
+  item: string;
+  competence: string;
+  sequenceTitle: string;
+  seanceNumero: number;
+  activity: FicheActiviteEleve;
+};
+
+type CoursPresentation = {
+  titre: string;
+  niveau: string;
+  objectif: string;
+  slides: {
+    titre: string;
+    type: string;
+    contenu: string[];
+    notes_enseignant: string;
+    interaction: string;
+  }[];
+  deroule_projection: string[];
+  materiel: string[];
+};
+
+type CoursSauvegarde = {
+  id: string;
+  createdAt: string;
+  preparedLessonId?: string;
+  cycle: string;
+  niveau: string;
+  domaine: string;
+  sousDomaine: string;
+  item: string;
+  competence: string;
+  sequenceTitle: string;
+  seanceNumero: number;
+  course: CoursPresentation;
+};
+
 type TuilePlanning = {
   id: string;
   preparedLessonId?: string;
@@ -78,7 +143,11 @@ type DossierSequences = Record<
   Record<string, Record<string, Record<string, SequencePreparee[]>>>
 >;
 
+type DossierBibliotheque = "preparations" | "activites" | "cours";
+
 const PREPARED_LESSONS_STORAGE_KEY = "sage-prepared-lessons";
+const STUDENT_ACTIVITIES_STORAGE_KEY = "sage-student-activities";
+const COURSE_PRESENTATIONS_STORAGE_KEY = "sage-course-presentations";
 const PLANNING_STORAGE_KEY = "sage-planning-tiles";
 const SEQUENCES_STORAGE_KEY = "sage-sequences";
 
@@ -216,10 +285,15 @@ function imprimerFiche(fiche: SeancePreparee) {
 export default function BibliothequePage() {
   const [sequences, setSequences] = useState<SequencePreparee[]>([]);
   const [fiches, setFiches] = useState<SeancePreparee[]>([]);
+  const [activites, setActivites] = useState<ActiviteEleveSauvegardee[]>([]);
+  const [cours, setCours] = useState<CoursSauvegarde[]>([]);
   const [tuilesPlanning, setTuilesPlanning] = useState<TuilePlanning[]>([]);
+  const [dossierActif, setDossierActif] = useState<DossierBibliotheque>("preparations");
   const [ficheEnModal, setFicheEnModal] = useState<SeancePreparee | null>(null);
   const [message, setMessage] = useState("");
   const [preparationEnCours, setPreparationEnCours] = useState("");
+  const [activiteEnCours, setActiviteEnCours] = useState("");
+  const [coursEnCours, setCoursEnCours] = useState("");
 
   useEffect(() => {
     function chargerDonnees() {
@@ -228,6 +302,20 @@ export default function BibliothequePage() {
       );
       setFiches(
         readUserData<SeancePreparee[]>(PREPARED_LESSONS_STORAGE_KEY, [], PREPARED_LESSONS_STORAGE_KEY)
+      );
+      setActivites(
+        readUserData<ActiviteEleveSauvegardee[]>(
+          STUDENT_ACTIVITIES_STORAGE_KEY,
+          [],
+          STUDENT_ACTIVITIES_STORAGE_KEY
+        )
+      );
+      setCours(
+        readUserData<CoursSauvegarde[]>(
+          COURSE_PRESENTATIONS_STORAGE_KEY,
+          [],
+          COURSE_PRESENTATIONS_STORAGE_KEY
+        )
       );
       setTuilesPlanning(
         readUserData<TuilePlanning[]>(PLANNING_STORAGE_KEY, [], PLANNING_STORAGE_KEY)
@@ -253,6 +341,32 @@ export default function BibliothequePage() {
       return acc;
     }, {});
   }, [sequences]);
+
+  const dossiersBibliotheque: Array<{
+    id: DossierBibliotheque;
+    titre: string;
+    description: string;
+    compteur: number;
+  }> = [
+    {
+      id: "preparations",
+      titre: "Fiches de préparation",
+      description: "Séances générées depuis Préparer, avec leurs progressions.",
+      compteur: fiches.length
+    },
+    {
+      id: "activites",
+      titre: "Activités",
+      description: "Fiches élèves et supports d'activité à distribuer en classe.",
+      compteur: activites.length
+    },
+    {
+      id: "cours",
+      titre: "Cours",
+      description: "Présentations enseignant à diffuser pendant la séance.",
+      compteur: cours.length
+    }
+  ];
 
   async function preparerSeance(sequence: SequencePreparee, seance: SeanceProgression) {
     const idPreparation = cleSeance(sequence, seance.numero);
@@ -391,6 +505,128 @@ export default function BibliothequePage() {
     modifierFicheSauvegardee(fiche.id, { ...fiche, lesson });
   }
 
+  async function genererActiviteEleve(fiche: SeancePreparee, lesson: SeanceDetaillee) {
+    setActiviteEnCours(fiche.id);
+    setMessage("");
+
+    try {
+      const aiConfig = readAiConfig();
+      const response = await fetch("/api/generate-student-activity", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          cycle: fiche.cycle,
+          niveau: fiche.niveau || lesson.niveau,
+          domaine: fiche.domaine,
+          sousDomaine: fiche.sousDomaine,
+          item: fiche.item,
+          competence: fiche.competence,
+          sequenceTitle: fiche.sequenceTitle,
+          seanceNumero: fiche.seanceNumero,
+          lesson,
+          aiProvider: aiConfig?.provider,
+          aiApiKey: aiConfig?.apiKey
+        })
+      });
+
+      const data = (await response.json()) as {
+        activity?: FicheActiviteEleve;
+        error?: string;
+      };
+
+      if (!response.ok || !data.activity) {
+        throw new Error(data.error ?? "Impossible de générer la fiche élève.");
+      }
+
+      const prochaineActivite: ActiviteEleveSauvegardee = {
+        id: crypto.randomUUID(),
+        createdAt: new Date().toISOString(),
+        preparedLessonId: fiche.id,
+        cycle: fiche.cycle,
+        niveau: fiche.niveau || lesson.niveau,
+        domaine: fiche.domaine,
+        sousDomaine: fiche.sousDomaine,
+        item: fiche.item,
+        competence: fiche.competence,
+        sequenceTitle: fiche.sequenceTitle,
+        seanceNumero: fiche.seanceNumero,
+        activity: data.activity
+      };
+
+      const prochainesActivites = [...activites, prochaineActivite];
+      setActivites(prochainesActivites);
+      writeUserData(STUDENT_ACTIVITIES_STORAGE_KEY, prochainesActivites);
+      setDossierActif("activites");
+      setFicheEnModal(null);
+      setMessage(`La fiche élève "${data.activity.titre}" a été générée et rangée dans Activités.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Une erreur inconnue est survenue.");
+    } finally {
+      setActiviteEnCours("");
+    }
+  }
+
+  async function genererCours(fiche: SeancePreparee, lesson: SeanceDetaillee) {
+    setCoursEnCours(fiche.id);
+    setMessage("");
+
+    try {
+      const aiConfig = readAiConfig();
+      const response = await fetch("/api/generate-course", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          cycle: fiche.cycle,
+          niveau: fiche.niveau || lesson.niveau,
+          domaine: fiche.domaine,
+          sousDomaine: fiche.sousDomaine,
+          item: fiche.item,
+          competence: fiche.competence,
+          sequenceTitle: fiche.sequenceTitle,
+          seanceNumero: fiche.seanceNumero,
+          lesson,
+          aiProvider: aiConfig?.provider,
+          aiApiKey: aiConfig?.apiKey
+        })
+      });
+
+      const data = (await response.json()) as {
+        course?: CoursPresentation;
+        error?: string;
+      };
+
+      if (!response.ok || !data.course) {
+        throw new Error(data.error ?? "Impossible de générer le cours.");
+      }
+
+      const prochainCours: CoursSauvegarde = {
+        id: crypto.randomUUID(),
+        createdAt: new Date().toISOString(),
+        preparedLessonId: fiche.id,
+        cycle: fiche.cycle,
+        niveau: fiche.niveau || lesson.niveau,
+        domaine: fiche.domaine,
+        sousDomaine: fiche.sousDomaine,
+        item: fiche.item,
+        competence: fiche.competence,
+        sequenceTitle: fiche.sequenceTitle,
+        seanceNumero: fiche.seanceNumero,
+        course: data.course
+      };
+
+      const prochainsCours = [...cours, prochainCours];
+      setCours(prochainsCours);
+      writeUserData(COURSE_PRESENTATIONS_STORAGE_KEY, prochainsCours);
+      setDossierActif("cours");
+      setFicheEnModal(null);
+      setMessage(`Le cours "${data.course.titre}" a été généré et rangé dans Cours.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Une erreur inconnue est survenue.");
+    } finally {
+      setCoursEnCours("");
+    }
+  }
+
   function supprimerSequence(sequence: SequencePreparee) {
     const confirmation = window.confirm(
       `Supprimer la séquence "${sequence.sequence.titre}" et ses fiches de séances associées ?`
@@ -449,13 +685,164 @@ export default function BibliothequePage() {
           </div>
         )}
 
-        {sequences.length === 0 && (
+        <div className="mb-6 grid gap-3 md:grid-cols-3">
+          {dossiersBibliotheque.map((dossier) => {
+            const actif = dossierActif === dossier.id;
+            return (
+              <button
+                key={dossier.id}
+                type="button"
+                onClick={() => setDossierActif(dossier.id)}
+                className={`rounded-lg border p-4 text-left shadow-sm transition ${
+                  actif
+                    ? "border-teal-300 bg-teal-50 ring-2 ring-teal-100"
+                    : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+                }`}
+              >
+                <span className="flex items-start justify-between gap-3">
+                  <span className="font-semibold text-slate-950">{dossier.titre}</span>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                      actif ? "bg-teal-700 text-white" : "bg-slate-100 text-slate-600"
+                    }`}
+                  >
+                    {dossier.compteur}
+                  </span>
+                </span>
+                <span className="mt-2 block text-sm leading-6 text-slate-600">
+                  {dossier.description}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {dossierActif === "preparations" && sequences.length === 0 && (
           <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-            Aucune séquence enregistrée pour le moment.
+            Aucune s&eacute;quence enregistr&eacute;e pour le moment.
           </div>
         )}
 
-        <div className="grid gap-4">
+        {dossierActif === "activites" && (
+          <div className="grid gap-4">
+            {activites.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-slate-300 bg-white p-6 text-slate-700">
+                <h2 className="text-lg font-semibold text-slate-950">Activit&eacute;s</h2>
+                <p className="mt-2 leading-7">
+                  Les fiches &eacute;l&egrave;ves g&eacute;n&eacute;r&eacute;es depuis une fiche de s&eacute;ance
+                  appara&icirc;tront ici.
+                </p>
+              </div>
+            ) : (
+              activites.map((activite) => (
+                <article
+                  key={activite.id}
+                  className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-teal-700">
+                        {activite.niveau} · Séance {activite.seanceNumero}
+                      </p>
+                      <h2 className="mt-1 text-xl font-bold text-slate-950">
+                        {activite.activity.titre}
+                      </h2>
+                      <p className="mt-1 text-sm text-slate-500">
+                        {activite.sequenceTitle} · {activite.domaine}
+                      </p>
+                    </div>
+                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                      Fiche élève
+                    </span>
+                  </div>
+
+                  <div className="mt-4 grid gap-4 text-sm leading-6 text-slate-700">
+                    <section>
+                      <h3 className="font-semibold text-slate-950">Consigne</h3>
+                      <p className="mt-1">{activite.activity.consigne}</p>
+                    </section>
+                    <section>
+                      <h3 className="font-semibold text-slate-950">Support</h3>
+                      <p className="mt-1 whitespace-pre-wrap">{activite.activity.support}</p>
+                    </section>
+                    <div className="grid gap-3">
+                      {activite.activity.activites.map((item, index) => (
+                        <section key={`${activite.id}-${index}`} className="rounded-md bg-slate-50 p-3">
+                          <h3 className="font-semibold text-slate-950">{item.titre}</h3>
+                          <p className="mt-1">{item.consigne}</p>
+                          <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            Réponse attendue : {item.format_reponse}
+                          </p>
+                        </section>
+                      ))}
+                    </div>
+                  </div>
+                </article>
+              ))
+            )}
+          </div>
+        )}
+
+        {dossierActif === "cours" && (
+          <div className="grid gap-4">
+            {cours.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-slate-300 bg-white p-6 text-slate-700">
+                <h2 className="text-lg font-semibold text-slate-950">Cours</h2>
+                <p className="mt-2 leading-7">
+                  Les pr&eacute;sentations enseignant g&eacute;n&eacute;r&eacute;es depuis une fiche de s&eacute;ance
+                  appara&icirc;tront ici.
+                </p>
+              </div>
+            ) : (
+              cours.map((item) => (
+                <article
+                  key={item.id}
+                  className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-teal-700">
+                        {item.niveau} · Séance {item.seanceNumero}
+                      </p>
+                      <h2 className="mt-1 text-xl font-bold text-slate-950">
+                        {item.course.titre}
+                      </h2>
+                      <p className="mt-1 text-sm text-slate-500">
+                        {item.sequenceTitle} · {item.domaine}
+                      </p>
+                    </div>
+                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                      Présentation
+                    </span>
+                  </div>
+
+                  <div className="mt-4 grid gap-3">
+                    {item.course.slides.map((slide, index) => (
+                      <section key={`${item.id}-${index}`} className="rounded-md bg-slate-50 p-3">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                          Slide {index + 1} · {slide.type}
+                        </p>
+                        <h3 className="mt-1 font-semibold text-slate-950">{slide.titre}</h3>
+                        <ul className="mt-2 list-disc space-y-1 pl-5 text-sm leading-6 text-slate-700">
+                          {slide.contenu.map((ligne, ligneIndex) => (
+                            <li key={ligneIndex}>{ligne}</li>
+                          ))}
+                        </ul>
+                        <p className="mt-2 text-sm text-slate-600">
+                          <span className="font-semibold text-slate-900">Interaction : </span>
+                          {slide.interaction}
+                        </p>
+                      </section>
+                    ))}
+                  </div>
+                </article>
+              ))
+            )}
+          </div>
+        )}
+
+        {dossierActif === "preparations" && (
+          <div className="grid gap-4">
           {Object.entries(dossiers).map(([cycle, niveaux]) => (
             <details key={cycle} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
               <summary className="cursor-pointer text-xl font-bold text-slate-950">{cycle}</summary>
@@ -674,7 +1061,8 @@ export default function BibliothequePage() {
               </div>
             </details>
           ))}
-        </div>
+          </div>
+        )}
       </section>
 
       {ficheEnModal && (
@@ -686,6 +1074,10 @@ export default function BibliothequePage() {
             modifierLessonSauvegardee(ficheEnModal, updated);
             setFicheEnModal({ ...ficheEnModal, lesson: updated });
           }}
+          onGenerateStudentActivity={(lesson) => genererActiviteEleve(ficheEnModal, lesson)}
+          studentActivityLoading={activiteEnCours === ficheEnModal.id}
+          onGenerateCourse={(lesson) => genererCours(ficheEnModal, lesson)}
+          courseLoading={coursEnCours === ficheEnModal.id}
           actions={
             <>
               <button

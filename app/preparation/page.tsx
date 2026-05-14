@@ -123,6 +123,70 @@ type SeancePreparee = {
   lesson: SeanceDetaillee;
 };
 
+type FicheActiviteEleve = {
+  titre: string;
+  niveau: string;
+  objectif: string;
+  consigne: string;
+  support: string;
+  activites: {
+    titre: string;
+    consigne: string;
+    format_reponse: string;
+    aides: string[];
+  }[];
+  differenciation: {
+    soutien: string;
+    approfondissement: string;
+  };
+  correction: string[];
+};
+
+type ActiviteEleveSauvegardee = {
+  id: string;
+  createdAt: string;
+  preparedLessonId?: string;
+  cycle: string;
+  niveau: string;
+  domaine: string;
+  sousDomaine: string;
+  item: string;
+  competence: string;
+  sequenceTitle: string;
+  seanceNumero: number;
+  activity: FicheActiviteEleve;
+};
+
+type CoursPresentation = {
+  titre: string;
+  niveau: string;
+  objectif: string;
+  slides: {
+    titre: string;
+    type: string;
+    contenu: string[];
+    notes_enseignant: string;
+    interaction: string;
+  }[];
+  deroule_projection: string[];
+  materiel: string[];
+};
+
+type CoursSauvegarde = {
+  id: string;
+  createdAt: string;
+  preparedLessonId?: string;
+  cycle: string;
+  niveau: string;
+  domaine: string;
+  sousDomaine: string;
+  item: string;
+  competence: string;
+  sequenceTitle: string;
+  seanceNumero: number;
+  course: CoursPresentation;
+};
+
 type SequencePreparee = {
   id: string;
   createdAt: string;
@@ -138,6 +202,8 @@ type SequencePreparee = {
 
 const PLANNING_STORAGE_KEY = "sage-planning-tiles";
 const PREPARED_LESSONS_STORAGE_KEY = "sage-prepared-lessons";
+const STUDENT_ACTIVITIES_STORAGE_KEY = "sage-student-activities";
+const COURSE_PRESENTATIONS_STORAGE_KEY = "sage-course-presentations";
 const SEQUENCES_STORAGE_KEY = "sage-sequences";
 
 const selectionVide: Selection = {
@@ -211,6 +277,8 @@ export default function PagePreparation() {
   const [generationEnCours, setGenerationEnCours] = useState(false);
   const [sequenceEnCours, setSequenceEnCours] = useState(false);
   const [seanceEnCours, setSeanceEnCours] = useState<number | null>(null);
+  const [activiteEleveEnCours, setActiviteEleveEnCours] = useState(false);
+  const [coursEnCours, setCoursEnCours] = useState(false);
 
   const referentiel = useMemo<LigneReferentiel[]>(
     () =>
@@ -677,6 +745,144 @@ export default function PagePreparation() {
     setMessagePlanning("La séance a été envoyée dans la réserve du planning.");
   }
 
+  async function genererActiviteEleve(lesson: SeanceDetaillee) {
+    if (!sequence || !seanceSource) {
+      setErreur("PrÃ©parez d'abord une sÃ©ance.");
+      return;
+    }
+
+    setActiviteEleveEnCours(true);
+    setErreur("");
+    setMessagePlanning("");
+
+    try {
+      const aiConfig = readAiConfig();
+      const response = await fetch("/api/generate-student-activity", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          cycle: selection.cycle,
+          niveau: selection.niveau || lesson.niveau,
+          domaine: selection.domaine,
+          sousDomaine: selection.sousDomaine,
+          item: selection.item,
+          competence: selection.competence,
+          sequenceTitle: sequence.titre,
+          seanceNumero: seanceSource.numero,
+          lesson,
+          aiProvider: aiConfig?.provider,
+          aiApiKey: aiConfig?.apiKey
+        })
+      });
+
+      const data = (await response.json()) as {
+        activity?: FicheActiviteEleve;
+        error?: string;
+      };
+
+      if (!response.ok || !data.activity) {
+        throw new Error(data.error ?? "Impossible de gÃ©nÃ©rer la fiche Ã©lÃ¨ve.");
+      }
+
+      const activitesExistantes = readUserData<ActiviteEleveSauvegardee[]>(
+        STUDENT_ACTIVITIES_STORAGE_KEY,
+        [],
+        STUDENT_ACTIVITIES_STORAGE_KEY
+      );
+
+      const prochaineActivite: ActiviteEleveSauvegardee = {
+        id: crypto.randomUUID(),
+        createdAt: new Date().toISOString(),
+        preparedLessonId: seancePrepareeId || undefined,
+        cycle: selection.cycle,
+        niveau: selection.niveau || lesson.niveau,
+        domaine: selection.domaine,
+        sousDomaine: selection.sousDomaine,
+        item: selection.item,
+        competence: selection.competence,
+        sequenceTitle: sequence.titre,
+        seanceNumero: seanceSource.numero,
+        activity: data.activity
+      };
+
+      writeUserData(STUDENT_ACTIVITIES_STORAGE_KEY, [...activitesExistantes, prochaineActivite]);
+      setMessagePlanning(`La fiche Ã©lÃ¨ve "${data.activity.titre}" a Ã©tÃ© rangÃ©e dans ActivitÃ©s.`);
+    } catch (error) {
+      setErreur(error instanceof Error ? error.message : "Une erreur inconnue est survenue.");
+    } finally {
+      setActiviteEleveEnCours(false);
+    }
+  }
+
+  async function genererCours(lesson: SeanceDetaillee) {
+    if (!sequence || !seanceSource) {
+      setErreur("Préparez d'abord une séance.");
+      return;
+    }
+
+    setCoursEnCours(true);
+    setErreur("");
+    setMessagePlanning("");
+
+    try {
+      const aiConfig = readAiConfig();
+      const response = await fetch("/api/generate-course", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          cycle: selection.cycle,
+          niveau: selection.niveau || lesson.niveau,
+          domaine: selection.domaine,
+          sousDomaine: selection.sousDomaine,
+          item: selection.item,
+          competence: selection.competence,
+          sequenceTitle: sequence.titre,
+          seanceNumero: seanceSource.numero,
+          lesson,
+          aiProvider: aiConfig?.provider,
+          aiApiKey: aiConfig?.apiKey
+        })
+      });
+
+      const data = (await response.json()) as {
+        course?: CoursPresentation;
+        error?: string;
+      };
+
+      if (!response.ok || !data.course) {
+        throw new Error(data.error ?? "Impossible de générer le cours.");
+      }
+
+      const coursExistants = readUserData<CoursSauvegarde[]>(
+        COURSE_PRESENTATIONS_STORAGE_KEY,
+        [],
+        COURSE_PRESENTATIONS_STORAGE_KEY
+      );
+
+      const prochainCours: CoursSauvegarde = {
+        id: crypto.randomUUID(),
+        createdAt: new Date().toISOString(),
+        preparedLessonId: seancePrepareeId || undefined,
+        cycle: selection.cycle,
+        niveau: selection.niveau || lesson.niveau,
+        domaine: selection.domaine,
+        sousDomaine: selection.sousDomaine,
+        item: selection.item,
+        competence: selection.competence,
+        sequenceTitle: sequence.titre,
+        seanceNumero: seanceSource.numero,
+        course: data.course
+      };
+
+      writeUserData(COURSE_PRESENTATIONS_STORAGE_KEY, [...coursExistants, prochainCours]);
+      setMessagePlanning(`Le cours "${data.course.titre}" a été rangé dans Cours.`);
+    } catch (error) {
+      setErreur(error instanceof Error ? error.message : "Une erreur inconnue est survenue.");
+    } finally {
+      setCoursEnCours(false);
+    }
+  }
+
   return (
     <main className="min-h-screen bg-slate-50 px-4 py-8 sm:px-6 lg:px-8">
       <section className="mx-auto max-w-5xl">
@@ -929,6 +1135,10 @@ export default function PagePreparation() {
             lesson={seanceDetaillee}
             onClose={() => setModalOuvert(false)}
             onSave={modifierSeanceDetaillee}
+            onGenerateStudentActivity={genererActiviteEleve}
+            studentActivityLoading={activiteEleveEnCours}
+            onGenerateCourse={genererCours}
+            courseLoading={coursEnCours}
             actions={
               <>
                 {messagePlanning && (
