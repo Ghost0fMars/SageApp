@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { callAiProvider, type AiProvider } from "../../lib/ai-provider";
 import { lireObjetJsonIa } from "../../lib/ai-json";
+import { buildReferencesContext } from "../../lib/references";
 import {
   getUserFromRequest,
   checkAndIncrementFreeGenerations,
@@ -97,7 +98,9 @@ function determineRegime(
 
 function buildSystemPrompt(
   regime: "cyclique" | "ouvert" | "maximal",
-  cycle?: string
+  cycle?: string,
+  niveau?: string,
+  domaine?: string
 ): string {
   const regimeDescriptions = {
     cyclique: {
@@ -130,6 +133,11 @@ function buildSystemPrompt(
   const cg =
     (cycle ? cycleGuidance[cycle] : null) ??
     "Adapter le niveau de difficulté et les modalités au cycle concerné.";
+
+  const referencesContext =
+    cycle && niveau && domaine
+      ? buildReferencesContext(cycle, niveau, domaine, "sequence")
+      : "";
 
   return `<role>
 Tu es SAGE, un assistant pédagogique expert en ingénierie de formation.
@@ -201,7 +209,7 @@ Retourne UNIQUEMENT un JSON valide, sans Markdown :
     }
   ]
 }
-</format_sortie>`;
+</format_sortie>${referencesContext}`;
 }
 
 function buildPrompt(
@@ -240,7 +248,7 @@ export async function POST(request: NextRequest) {
   }
 
   const regime = determineRegime(typeSequence ?? "introduction");
-  const systemPrompt = buildSystemPrompt(regime, contexte.cycle);
+  const systemPrompt = buildSystemPrompt(regime, contexte.cycle, contexte.niveau, contexte.domaine);
   const prompt = buildPrompt(contexte, regime);
 
   function parseSequence(texte: string) {

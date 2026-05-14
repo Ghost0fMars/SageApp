@@ -180,10 +180,13 @@ export async function POST(request: NextRequest) {
     : dernierMessage;
 
   if (aiProvider && aiApiKey && aiProvider !== "none") {
-    const docContext =
-      aiProvider === "openai"
-        ? await rechercherDocumentation(dernierMessage, aiApiKey).catch(() => "")
-        : "";
+    // RAG : on utilise la clé OpenAI du serveur pour les embeddings,
+    // quelle que soit le provider choisi par l'utilisateur
+    const embeddingKey =
+      aiProvider === "openai" ? aiApiKey : (process.env.OPENAI_API_KEY ?? "");
+    const docContext = embeddingKey
+      ? await rechercherDocumentation(dernierMessage, embeddingKey).catch(() => "")
+      : "";
 
     const instructions = buildSystemPrompt(context, docContext);
 

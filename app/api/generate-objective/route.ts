@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 import { callAiProvider, type AiProvider } from "../../lib/ai-provider";
+import { buildReferencesContext } from "../../lib/references";
 
 type GenerateObjectiveRequest = {
   aiProvider?: string;
   aiApiKey?: string;
+  cycle?: string;
   niveau?: string;
   domaine?: string;
   competence?: string;
@@ -59,6 +61,17 @@ export async function POST(request: Request) {
     );
   }
 
+  const referencesContext = buildReferencesContext(
+    contexte.cycle ?? "",
+    contexte.niveau ?? "",
+    contexte.domaine ?? "",
+    "objective"
+  );
+
+  const systemPromptWithRefs = referencesContext
+    ? SYSTEM_PROMPT + referencesContext
+    : SYSTEM_PROMPT;
+
   const prompt = `Formule un objectif pédagogique pour des élèves de ${contexte.niveau} en ${contexte.domaine}.
 Compétence visée : ${contexte.competence}`;
 
@@ -67,7 +80,7 @@ Compétence visée : ${contexte.competence}`;
       const objectif = await callAiProvider({
         provider: aiProvider as AiProvider,
         apiKey: aiApiKey,
-        system: SYSTEM_PROMPT,
+        system: systemPromptWithRefs,
         prompt,
         maxTokens: 150
       });
@@ -115,7 +128,7 @@ Compétence visée : ${contexte.competence}`;
     },
     body: JSON.stringify({
       model: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
-      instructions: SYSTEM_PROMPT,
+      instructions: systemPromptWithRefs,
       input: prompt,
       max_output_tokens: 150,
       reasoning: { effort: "none" }

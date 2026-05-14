@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { callAiProvider, type AiProvider } from "../../lib/ai-provider";
 import { lireObjetJsonIa } from "../../lib/ai-json";
+import { buildReferencesContext } from "../../lib/references";
 
 type BeatInput = {
   amorce?: string;
@@ -89,7 +90,12 @@ function seanceValide(seance: SeanceDetaillee) {
   );
 }
 
-const SYSTEM_PROMPT = `<role>
+function buildLessonSystemPrompt(cycle: string, niveau: string, domaine: string): string {
+  const referencesContext = buildReferencesContext(cycle, niveau, domaine, "lesson");
+  return SYSTEM_PROMPT_BASE + referencesContext;
+}
+
+const SYSTEM_PROMPT_BASE = `<role>
 Tu es SAGE, un assistant pédagogique expert en préparation de séance.
 Tu prépares des séances détaillées, structurées comme des mises en scène pédagogiques.
 </role>
@@ -215,6 +221,7 @@ export async function POST(request: Request) {
     );
   }
 
+  const systemPrompt = buildLessonSystemPrompt(contexte.cycle, contexte.niveau, contexte.domaine);
   const prompt = buildPrompt(contexte);
 
   function parseSeance(texte: string) {
@@ -230,7 +237,7 @@ export async function POST(request: Request) {
       const texte = await callAiProvider({
         provider: aiProvider as AiProvider,
         apiKey: aiApiKey,
-        system: SYSTEM_PROMPT,
+        system: systemPrompt,
         prompt,
         maxTokens: 2800
       });
@@ -275,7 +282,7 @@ export async function POST(request: Request) {
     },
     body: JSON.stringify({
       model: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
-      instructions: SYSTEM_PROMPT,
+      instructions: systemPrompt,
       input: prompt,
       max_output_tokens: 2800,
       reasoning: { effort: "none" }
