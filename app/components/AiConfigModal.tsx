@@ -170,8 +170,8 @@ export function AiConfigForm({ onSaved }: { onSaved?: () => void }) {
       )}
 
       <p className="rounded-lg bg-slate-50 px-3 py-2.5 text-xs leading-5 text-slate-600">
-        Votre clé API est stockée uniquement dans votre navigateur et n&apos;est jamais envoyée à
-        nos serveurs, sauf pour être transmise au fournisseur IA lors de chaque génération.
+        Votre clé API est sauvegardée dans votre compte et synchronisée entre vos appareils. Elle
+        n&apos;est utilisée que pour être transmise au fournisseur IA lors de chaque génération.
       </p>
 
       <button
