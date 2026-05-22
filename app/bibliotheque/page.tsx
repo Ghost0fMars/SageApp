@@ -378,6 +378,7 @@ export default function BibliothequePage() {
     setMessage("");
 
     try {
+      const aiConfig = readAiConfig();
       const response = await fetch("/api/generate-lesson", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -389,7 +390,9 @@ export default function BibliothequePage() {
           item: sequence.item,
           competence: sequence.competence,
           objectifSequence: sequence.objectif,
-          seance
+          seance,
+          aiProvider: aiConfig?.provider,
+          aiApiKey: aiConfig?.apiKey
         })
       });
 
