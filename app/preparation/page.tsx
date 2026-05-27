@@ -263,6 +263,9 @@ function reinitialiserApresChamp(selection: Selection, champModifie: keyof Selec
 }
 
 export default function PagePreparation() {
+  const [modePrompt, setModePrompt] = useState(false);
+  const [promptLibre, setPromptLibre] = useState("");
+  const [generationPromptEnCours, setGenerationPromptEnCours] = useState(false);
   const [selection, setSelection] = useState<Selection>(selectionVide);
   const [objectif, setObjectif] = useState("");
   const [sequence, setSequence] = useState<Sequence | null>(null);
@@ -366,6 +369,117 @@ export default function PagePreparation() {
     setSeanceEnReserve(false);
     setMessagePlanning("");
     setErreur("");
+  }
+
+  async function genererSequenceDepuisPrompt() {
+    if (!promptLibre.trim()) {
+      setErreur("Entrez une description de la séquence souhaitée.");
+      return;
+    }
+
+    setGenerationPromptEnCours(true);
+    setErreur("");
+    setSequence(null);
+    setSequenceSauvegardeeId("");
+    setSeanceDetaillee(null);
+    setSeanceSource(null);
+    setSeancePrepareeId("");
+    setSeanceEnReserve(false);
+    setMessagePlanning("");
+    setObjectif("");
+
+    try {
+      const aiConfig = readAiConfig();
+      const token =
+        !aiConfig && supabase
+          ? (await supabase.auth.getSession()).data.session?.access_token
+          : null;
+
+      const response = await fetch("/api/generate-sequence-from-prompt", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({
+          promptLibre: promptLibre.trim(),
+          aiProvider: aiConfig?.provider,
+          aiApiKey: aiConfig?.apiKey
+        })
+      });
+
+      const data = (await response.json()) as {
+        contexte?: {
+          cycle: string;
+          niveau: string;
+          domaine: string;
+          sousDomaine: string;
+          item: string;
+          competence: string;
+          objectif: string;
+        };
+        sequence?: Sequence;
+        error?: string;
+      };
+
+      if (response.status === 403 && data.error === "FREE_LIMIT_REACHED") {
+        window.dispatchEvent(new CustomEvent("open-ai-config", { detail: { freeLimitReached: true } }));
+        throw new Error("Vous avez utilisé vos 3 générations gratuites.");
+      }
+
+      if (!response.ok || !data.sequence) {
+        throw new Error(data.error ?? "Impossible de générer la séquence.");
+      }
+
+      const ctx = data.contexte ?? {
+        cycle: "",
+        niveau: "",
+        domaine: "",
+        sousDomaine: "",
+        item: "",
+        competence: "",
+        objectif: ""
+      };
+
+      setSelection({
+        cycle: ctx.cycle,
+        niveau: ctx.niveau,
+        domaine: ctx.domaine,
+        sousDomaine: ctx.sousDomaine,
+        item: ctx.item,
+        competence: ctx.competence
+      });
+      setObjectif(ctx.objectif);
+
+      const sequenceId = crypto.randomUUID();
+      setSequence(data.sequence);
+      setSequenceSauvegardeeId(sequenceId);
+
+      const sequencesExistantes = readUserData<SequencePreparee[]>(
+        SEQUENCES_STORAGE_KEY,
+        [],
+        SEQUENCES_STORAGE_KEY
+      );
+      writeUserData(SEQUENCES_STORAGE_KEY, [
+        ...sequencesExistantes,
+        {
+          id: sequenceId,
+          createdAt: new Date().toISOString(),
+          cycle: ctx.cycle,
+          niveau: ctx.niveau,
+          domaine: ctx.domaine,
+          sousDomaine: ctx.sousDomaine,
+          item: ctx.item,
+          competence: ctx.competence,
+          objectif: ctx.objectif,
+          sequence: data.sequence
+        }
+      ]);
+    } catch (error) {
+      setErreur(error instanceof Error ? error.message : "Une erreur inconnue est survenue.");
+    } finally {
+      setGenerationPromptEnCours(false);
+    }
   }
 
   async function genererObjectif() {
@@ -892,11 +1006,12 @@ export default function PagePreparation() {
               Préparer une séquence
             </p>
             <h1 className="mt-2 text-3xl font-bold text-slate-950 sm:text-4xl">
-              Sélectionner une compétence
+              {modePrompt ? "Génération par prompt" : "Sélectionner une compétence"}
             </h1>
             <p className="mt-3 max-w-2xl text-base leading-7 text-slate-700">
-              Choisissez progressivement un cycle, un niveau, un domaine, puis une compétence issue
-              des programmes de l'Éducation Nationale.
+              {modePrompt
+                ? "Décrivez librement la séquence souhaitée. L'IA se charge du reste."
+                : "Choisissez progressivement un cycle, un niveau, un domaine, puis une compétence issue des programmes de l'Éducation Nationale."}
             </p>
           </div>
           <a
@@ -907,73 +1022,121 @@ export default function PagePreparation() {
           </a>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
-          <form className="min-w-0 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="grid gap-4">
-              {etapes.map((etape) => (
-                <label key={etape.id} className="grid min-w-0 gap-2">
-                  <span className="text-sm font-medium text-slate-800">{etape.label}</span>
-                  <select
-                    value={selection[etape.id]}
-                    disabled={etape.disabled}
-                    onChange={(e) => changerSelection(etape.id, e.target.value)}
-                    className="min-h-11 w-full min-w-0 max-w-full truncate rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 shadow-sm outline-none transition focus:border-teal-600 focus:ring-2 focus:ring-teal-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
-                  >
-                    <option value="">Sélectionner...</option>
-                    {etape.options.map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              ))}
-            </div>
-          </form>
+        <div className="mb-5 flex gap-2">
+          <button
+            type="button"
+            onClick={() => { setModePrompt(false); setErreur(""); }}
+            className={`rounded-md px-4 py-2 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-teal-300 ${!modePrompt ? "bg-teal-700 text-white shadow-sm" : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50"}`}
+          >
+            Par référentiel
+          </button>
+          <button
+            type="button"
+            onClick={() => { setModePrompt(true); setErreur(""); }}
+            className={`rounded-md px-4 py-2 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-teal-300 ${modePrompt ? "bg-teal-700 text-white shadow-sm" : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50"}`}
+          >
+            Par prompt libre
+          </button>
+        </div>
 
-          <aside className="min-w-0 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-            <h2 className="text-xl font-semibold text-slate-950">Résultat</h2>
-
-            <div className="mt-4 rounded-md bg-slate-100 p-4">
-              <p className="text-sm font-medium text-slate-700">Compétence sélectionnée</p>
-              <p className="mt-2 break-words text-base leading-7 text-slate-950">
-                {selection.competence || "Aucune compétence sélectionnée pour le moment."}
-              </p>
-            </div>
-
-            <button
-              type="button"
-              onClick={genererObjectif}
-              disabled={generationEnCours}
-              className="mt-5 w-full rounded-md bg-teal-700 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-teal-800 focus:outline-none focus:ring-2 focus:ring-teal-300 disabled:cursor-wait disabled:bg-teal-900/60"
-            >
-              {generationEnCours ? "Génération..." : "Générer objectif"}
-            </button>
-
+        {modePrompt ? (
+          <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+            <label className="grid gap-2">
+              <span className="text-sm font-medium text-slate-800">
+                Décrivez la séquence souhaitée
+              </span>
+              <textarea
+                value={promptLibre}
+                onChange={(e) => setPromptLibre(e.target.value)}
+                placeholder="Ex. : Prépare une séquence sur l'alimentation et la santé pour une classe de CM2 en 5 séances."
+                rows={4}
+                className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm leading-7 text-slate-950 shadow-sm outline-none transition focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
+              />
+            </label>
             {erreur && (
-              <div className="mt-5 rounded-md border border-red-200 bg-red-50 p-4">
+              <div className="mt-4 rounded-md border border-red-200 bg-red-50 p-4">
                 <p className="text-sm font-medium text-red-900">Erreur</p>
                 <p className="mt-2 leading-7 text-red-950">{erreur}</p>
               </div>
             )}
-
-            {objectif && (
-              <div className="mt-5 rounded-md border border-teal-200 bg-teal-50 p-4">
-                <p className="text-sm font-medium text-teal-900">Objectif généré</p>
-                <p className="mt-2 leading-7 text-teal-950">{objectif}</p>
-              </div>
-            )}
-
             <button
               type="button"
-              onClick={genererSequence}
-              disabled={!objectif || sequenceEnCours}
-              className="mt-5 w-full rounded-md bg-slate-900 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-300 disabled:cursor-not-allowed disabled:bg-slate-400"
+              onClick={genererSequenceDepuisPrompt}
+              disabled={generationPromptEnCours || !promptLibre.trim()}
+              className="mt-4 w-full rounded-md bg-teal-700 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-teal-800 focus:outline-none focus:ring-2 focus:ring-teal-300 disabled:cursor-not-allowed disabled:bg-slate-400"
             >
-              {sequenceEnCours ? "Création de la séquence..." : "Créer la progression de séquence"}
+              {generationPromptEnCours ? "Génération de la séquence..." : "Générer la séquence"}
             </button>
-          </aside>
-        </div>
+          </div>
+        ) : (
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
+            <form className="min-w-0 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="grid gap-4">
+                {etapes.map((etape) => (
+                  <label key={etape.id} className="grid min-w-0 gap-2">
+                    <span className="text-sm font-medium text-slate-800">{etape.label}</span>
+                    <select
+                      value={selection[etape.id]}
+                      disabled={etape.disabled}
+                      onChange={(e) => changerSelection(etape.id, e.target.value)}
+                      className="min-h-11 w-full min-w-0 max-w-full truncate rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 shadow-sm outline-none transition focus:border-teal-600 focus:ring-2 focus:ring-teal-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                    >
+                      <option value="">Sélectionner...</option>
+                      {etape.options.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ))}
+              </div>
+            </form>
+
+            <aside className="min-w-0 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+              <h2 className="text-xl font-semibold text-slate-950">Résultat</h2>
+
+              <div className="mt-4 rounded-md bg-slate-100 p-4">
+                <p className="text-sm font-medium text-slate-700">Compétence sélectionnée</p>
+                <p className="mt-2 break-words text-base leading-7 text-slate-950">
+                  {selection.competence || "Aucune compétence sélectionnée pour le moment."}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={genererObjectif}
+                disabled={generationEnCours}
+                className="mt-5 w-full rounded-md bg-teal-700 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-teal-800 focus:outline-none focus:ring-2 focus:ring-teal-300 disabled:cursor-wait disabled:bg-teal-900/60"
+              >
+                {generationEnCours ? "Génération..." : "Générer objectif"}
+              </button>
+
+              {erreur && (
+                <div className="mt-5 rounded-md border border-red-200 bg-red-50 p-4">
+                  <p className="text-sm font-medium text-red-900">Erreur</p>
+                  <p className="mt-2 leading-7 text-red-950">{erreur}</p>
+                </div>
+              )}
+
+              {objectif && (
+                <div className="mt-5 rounded-md border border-teal-200 bg-teal-50 p-4">
+                  <p className="text-sm font-medium text-teal-900">Objectif généré</p>
+                  <p className="mt-2 leading-7 text-teal-950">{objectif}</p>
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={genererSequence}
+                disabled={!objectif || sequenceEnCours}
+                className="mt-5 w-full rounded-md bg-slate-900 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-300 disabled:cursor-not-allowed disabled:bg-slate-400"
+              >
+                {sequenceEnCours ? "Création de la séquence..." : "Créer la progression de séquence"}
+              </button>
+            </aside>
+          </div>
+        )}
 
         {sequence && (
           <section className="mt-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">

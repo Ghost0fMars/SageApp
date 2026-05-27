@@ -12,7 +12,10 @@ function extraireBlocJson(texte: string) {
 }
 
 function nettoyerJsonFrequent(json: string) {
-  return json.replace(/,\s*([}\]])/g, "$1");
+  return json
+    .replace(/,\s*([}\]])/g, "$1")
+    .replace(/([^\\])\n/g, "$1 ")
+    .replace(/([^\\])\r/g, "$1 ");
 }
 
 export function lireObjetJsonIa<T extends JsonRecord>(texte: string): T {
