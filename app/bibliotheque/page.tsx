@@ -346,6 +346,28 @@ export default function BibliothequePage() {
     }, {});
   }, [sequences]);
 
+  const dossiersActivites = useMemo(() => {
+    return activites.reduce<Record<string, Record<string, ActiviteEleveSauvegardee[]>>>((acc, a) => {
+      const niveau = a.niveau || "Niveau non défini";
+      const domaine = a.domaine || "Domaine non défini";
+      acc[niveau] ??= {};
+      acc[niveau][domaine] ??= [];
+      acc[niveau][domaine].push(a);
+      return acc;
+    }, {});
+  }, [activites]);
+
+  const dossiersCours = useMemo(() => {
+    return cours.reduce<Record<string, Record<string, CoursSauvegarde[]>>>((acc, c) => {
+      const niveau = c.niveau || "Niveau non défini";
+      const domaine = c.domaine || "Domaine non défini";
+      acc[niveau] ??= {};
+      acc[niveau][domaine] ??= [];
+      acc[niveau][domaine].push(c);
+      return acc;
+    }, {});
+  }, [cours]);
+
   const dossiersBibliotheque: Array<{
     id: DossierBibliotheque;
     titre: string;
@@ -741,79 +763,106 @@ export default function BibliothequePage() {
                 </p>
               </div>
             ) : (
-              activites.map((activite) => (
-                <article
-                  key={activite.id}
-                  className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-teal-700">
-                        {activite.niveau} · Séance {activite.seanceNumero}
-                      </p>
-                      <h2 className="mt-1 text-xl font-bold text-slate-950">
-                        {activite.activity.titre}
-                      </h2>
-                      <p className="mt-1 text-sm text-slate-500">
-                        {activite.sequenceTitle} · {activite.domaine}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="rounded-full bg-teal-50 border border-teal-200 px-3 py-1 text-xs font-semibold text-teal-700">
-                        Fiche élève
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => setActiviteEnViewer(activite)}
-                        className="flex items-center gap-1.5 rounded-md bg-teal-700 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-teal-800"
-                      >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                          <polyline points="6 9 6 2 18 2 18 9"/>
-                          <path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/>
-                          <rect x="6" y="14" width="12" height="8"/>
-                        </svg>
-                        Ouvrir / Imprimer
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 grid gap-4 text-sm leading-6 text-slate-700">
-                    <section>
-                      <h3 className="font-semibold text-slate-950">Consigne</h3>
-                      <p className="mt-1">{activite.activity.consigne}</p>
-                    </section>
-                    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                      {activite.activity.activites.map((item, index) => (
-                        <section key={`${activite.id}-${index}`} className="rounded-md bg-slate-50 p-3 border border-slate-100">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="flex-shrink-0 grid h-5 w-5 place-items-center rounded-full bg-slate-200 text-xs font-black text-slate-600">
-                              {index + 1}
+              Object.entries(dossiersActivites).map(([niveau, domaines]) => (
+                <details key={niveau} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm" open>
+                  <summary className="cursor-pointer text-xl font-bold text-slate-950">{niveau}</summary>
+                  <div className="mt-4 grid gap-3 pl-4">
+                    {Object.entries(domaines).map(([domaine, listeActivites]) => {
+                      const couleur = getDisciplineColor(domaine);
+                      return (
+                        <details
+                          key={domaine}
+                          className="rounded-md border border-l-[6px] p-3"
+                          style={{ backgroundColor: couleur.softBackground, borderColor: couleur.border, color: couleur.text }}
+                          open
+                        >
+                          <summary className="cursor-pointer font-semibold">
+                            {domaine}
+                            <span className="ml-2 rounded-full bg-white/60 px-2 py-0.5 text-xs font-semibold" style={{ color: couleur.text }}>
+                              {listeActivites.length}
                             </span>
-                            <h3 className="font-semibold text-slate-950 text-xs truncate">{item.titre}</h3>
+                          </summary>
+                          <div className="mt-3 grid gap-3">
+                            {listeActivites.map((activite) => (
+                              <article
+                                key={activite.id}
+                                className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"
+                              >
+                                <div className="flex flex-wrap items-start justify-between gap-3">
+                                  <div>
+                                    <p className="text-xs font-semibold uppercase tracking-wide text-teal-700">
+                                      {activite.sequenceTitle} · Séance {activite.seanceNumero}
+                                    </p>
+                                    <h2 className="mt-1 text-xl font-bold text-slate-950">
+                                      {activite.activity.titre}
+                                    </h2>
+                                    <p className="mt-1 text-sm text-slate-500">
+                                      {activite.sousDomaine}
+                                    </p>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="rounded-full bg-teal-50 border border-teal-200 px-3 py-1 text-xs font-semibold text-teal-700">
+                                      Fiche élève
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => setActiviteEnViewer(activite)}
+                                      className="flex items-center gap-1.5 rounded-md bg-teal-700 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-teal-800"
+                                    >
+                                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                        <polyline points="6 9 6 2 18 2 18 9"/>
+                                        <path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/>
+                                        <rect x="6" y="14" width="12" height="8"/>
+                                      </svg>
+                                      Ouvrir / Imprimer
+                                    </button>
+                                  </div>
+                                </div>
+
+                                <div className="mt-4 grid gap-4 text-sm leading-6 text-slate-700">
+                                  <section>
+                                    <h3 className="font-semibold text-slate-950">Consigne</h3>
+                                    <p className="mt-1">{activite.activity.consigne}</p>
+                                  </section>
+                                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                                    {activite.activity.activites.map((item, index) => (
+                                      <section key={`${activite.id}-${index}`} className="rounded-md bg-slate-50 p-3 border border-slate-100">
+                                        <div className="flex items-center gap-2 mb-1">
+                                          <span className="flex-shrink-0 grid h-5 w-5 place-items-center rounded-full bg-slate-200 text-xs font-black text-slate-600">
+                                            {index + 1}
+                                          </span>
+                                          <h3 className="font-semibold text-slate-950 text-xs truncate">{item.titre}</h3>
+                                        </div>
+                                        <p className="mt-1 text-xs text-slate-600 line-clamp-2">{item.consigne}</p>
+                                        <p className="mt-1.5 text-xs font-semibold text-slate-400">
+                                          {item.format_reponse}
+                                        </p>
+                                      </section>
+                                    ))}
+                                  </div>
+                                  {(activite.activity.differenciation.soutien || activite.activity.differenciation.approfondissement) && (
+                                    <div className="flex flex-wrap gap-2">
+                                      {activite.activity.differenciation.soutien && (
+                                        <span className="rounded-full bg-blue-50 border border-blue-200 px-3 py-1 text-xs text-blue-700">
+                                          Soutien disponible
+                                        </span>
+                                      )}
+                                      {activite.activity.differenciation.approfondissement && (
+                                        <span className="rounded-full bg-purple-50 border border-purple-200 px-3 py-1 text-xs text-purple-700">
+                                          Approfondissement disponible
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              </article>
+                            ))}
                           </div>
-                          <p className="mt-1 text-xs text-slate-600 line-clamp-2">{item.consigne}</p>
-                          <p className="mt-1.5 text-xs font-semibold text-slate-400">
-                            {item.format_reponse}
-                          </p>
-                        </section>
-                      ))}
-                    </div>
-                    {(activite.activity.differenciation.soutien || activite.activity.differenciation.approfondissement) && (
-                      <div className="flex flex-wrap gap-2">
-                        {activite.activity.differenciation.soutien && (
-                          <span className="rounded-full bg-blue-50 border border-blue-200 px-3 py-1 text-xs text-blue-700">
-                            Soutien disponible
-                          </span>
-                        )}
-                        {activite.activity.differenciation.approfondissement && (
-                          <span className="rounded-full bg-purple-50 border border-purple-200 px-3 py-1 text-xs text-purple-700">
-                            Approfondissement disponible
-                          </span>
-                        )}
-                      </div>
-                    )}
+                        </details>
+                      );
+                    })}
                   </div>
-                </article>
+                </details>
               ))
             )}
           </div>
@@ -830,72 +879,98 @@ export default function BibliothequePage() {
                 </p>
               </div>
             ) : (
-              cours.map((item) => (
-                <article
-                  key={item.id}
-                  className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-teal-700">
-                        {item.niveau} · Séance {item.seanceNumero}
-                      </p>
-                      <h2 className="mt-1 text-xl font-bold text-slate-950">
-                        {item.course.titre}
-                      </h2>
-                      <p className="mt-1 text-sm text-slate-500">
-                        {item.sequenceTitle} · {item.domaine}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="rounded-full bg-slate-100 border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600">
-                        {item.course.slides.length} slides
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => setCoursEnViewer(item)}
-                        className="flex items-center gap-1.5 rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-700"
-                      >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                          <rect x="2" y="3" width="20" height="14" rx="2"/>
-                          <path d="M8 21h8M12 17v4"/>
-                        </svg>
-                        Projeter
-                      </button>
-                    </div>
-                  </div>
+              Object.entries(dossiersCours).map(([niveau, domaines]) => (
+                <details key={niveau} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm" open>
+                  <summary className="cursor-pointer text-xl font-bold text-slate-950">{niveau}</summary>
+                  <div className="mt-4 grid gap-3 pl-4">
+                    {Object.entries(domaines).map(([domaine, listeCours]) => {
+                      const couleur = getDisciplineColor(domaine);
+                      return (
+                        <details
+                          key={domaine}
+                          className="rounded-md border border-l-[6px] p-3"
+                          style={{ backgroundColor: couleur.softBackground, borderColor: couleur.border, color: couleur.text }}
+                          open
+                        >
+                          <summary className="cursor-pointer font-semibold">
+                            {domaine}
+                            <span className="ml-2 rounded-full bg-white/60 px-2 py-0.5 text-xs font-semibold" style={{ color: couleur.text }}>
+                              {listeCours.length}
+                            </span>
+                          </summary>
+                          <div className="mt-3 grid gap-3">
+                            {listeCours.map((item) => (
+                              <article
+                                key={item.id}
+                                className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"
+                              >
+                                <div className="flex flex-wrap items-start justify-between gap-3">
+                                  <div>
+                                    <p className="text-xs font-semibold uppercase tracking-wide text-teal-700">
+                                      {item.sequenceTitle} · Séance {item.seanceNumero}
+                                    </p>
+                                    <h2 className="mt-1 text-xl font-bold text-slate-950">
+                                      {item.course.titre}
+                                    </h2>
+                                    <p className="mt-1 text-sm text-slate-500">
+                                      {item.sousDomaine}
+                                    </p>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="rounded-full bg-slate-100 border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600">
+                                      {item.course.slides.length} slides
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => setCoursEnViewer(item)}
+                                      className="flex items-center gap-1.5 rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-700"
+                                    >
+                                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                        <rect x="2" y="3" width="20" height="14" rx="2"/>
+                                        <path d="M8 21h8M12 17v4"/>
+                                      </svg>
+                                      Projeter
+                                    </button>
+                                  </div>
+                                </div>
 
-                  {/* Slides preview as a horizontal strip */}
-                  <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
-                    {item.course.slides.map((slide, index) => (
-                      <button
-                        key={`${item.id}-${index}`}
-                        type="button"
-                        onClick={() => { setCoursEnViewer(item); }}
-                        className="flex-shrink-0 w-36 rounded-md bg-slate-900 p-3 text-left hover:bg-slate-800 transition"
-                      >
-                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1">
-                          {index + 1} · {slide.type}
-                        </p>
-                        <p className="text-xs font-bold text-white leading-snug line-clamp-2">{slide.titre}</p>
-                        {slide.contenu[0] && (
-                          <p className="mt-1 text-xs text-slate-400 line-clamp-2 leading-snug">{slide.contenu[0]}</p>
-                        )}
-                      </button>
-                    ))}
-                  </div>
+                                <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
+                                  {item.course.slides.map((slide, index) => (
+                                    <button
+                                      key={`${item.id}-${index}`}
+                                      type="button"
+                                      onClick={() => { setCoursEnViewer(item); }}
+                                      className="flex-shrink-0 w-36 rounded-md bg-slate-900 p-3 text-left hover:bg-slate-800 transition"
+                                    >
+                                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1">
+                                        {index + 1} · {slide.type}
+                                      </p>
+                                      <p className="text-xs font-bold text-white leading-snug line-clamp-2">{slide.titre}</p>
+                                      {slide.contenu[0] && (
+                                        <p className="mt-1 text-xs text-slate-400 line-clamp-2 leading-snug">{slide.contenu[0]}</p>
+                                      )}
+                                    </button>
+                                  ))}
+                                </div>
 
-                  {item.course.deroule_projection && item.course.deroule_projection.length > 0 && (
-                    <div className="mt-3 rounded-md bg-slate-50 px-4 py-2 border border-slate-100">
-                      <p className="text-xs font-semibold text-slate-500 mb-1 uppercase tracking-wide">Déroulé de projection</p>
-                      <ul className="space-y-0.5">
-                        {item.course.deroule_projection.map((etape, i) => (
-                          <li key={i} className="text-xs leading-5 text-slate-600">→ {etape}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </article>
+                                {item.course.deroule_projection && item.course.deroule_projection.length > 0 && (
+                                  <div className="mt-3 rounded-md bg-slate-50 px-4 py-2 border border-slate-100">
+                                    <p className="text-xs font-semibold text-slate-500 mb-1 uppercase tracking-wide">Déroulé de projection</p>
+                                    <ul className="space-y-0.5">
+                                      {item.course.deroule_projection.map((etape, i) => (
+                                        <li key={i} className="text-xs leading-5 text-slate-600">→ {etape}</li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                )}
+                              </article>
+                            ))}
+                          </div>
+                        </details>
+                      );
+                    })}
+                  </div>
+                </details>
               ))
             )}
           </div>
