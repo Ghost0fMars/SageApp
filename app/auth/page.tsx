@@ -141,7 +141,7 @@ export default function AuthPage() {
           {mode === "connexion" ? "Connexion" : "Créer un compte"}
         </h1>
         <p className="mt-2 leading-7 text-slate-700">
-          Connectez-vous pour sauvegarder les élèves, préparations, progressions et plannings dans Supabase.
+          Connectez-vous pour sauvegarder les élèves, préparations, progressions et plannings.
         </p>
 
         {!supabaseConfigured && (
