@@ -1,81 +1,164 @@
-# Sage App
+# SAGE
 
-Application web MVP pour enseignant, créée avec Next.js, TypeScript et Tailwind CSS.
+**Système d'Assistance et de Gestion Éducative**
 
-## Objectif du MVP
+Application d'aide à la préparation pédagogique pour les enseignants : du référentiel de compétences jusqu'à la séance prête à imprimer, avec génération assistée par IA, planning, bibliothèque persistante et suivi des élèves.
 
-- Charger les données depuis `Référentiel_de_compétences.json`.
-- Afficher une sélection en cascade : Cycle → Niveau → Domaine → Sous-domaine → Item → Compétence.
-- Afficher la compétence sélectionnée.
-- Générer un objectif pédagogique avec l'API OpenAI.
-- Générer une progression de séquence à partir des choix et de l'objectif.
-- Préparer une séance détaillée à partir d'une séance choisie dans la progression.
-- Exporter la séance préparée en PDF via l'impression du navigateur.
-- Envoyer une séance préparée dans la réserve du planning.
-- Retrouver les séances préparées dans une bibliothèque persistante.
-- Gérer les élèves et les suivis dans un tableau éditable.
-- Sauvegarder les données localement par utilisateur.
-- Afficher les évènements Google Agenda dans le cahier journal.
-- Suivre les progrès des élèves avec des évaluations.
+Développée avec Next.js, TypeScript et Tailwind CSS.
+
+> 🧪 **Bêta ouverte.** SAGE est en cours de développement et partagé pour test. Des aspérités sont attendues — c'est le but. Tous les retours sont bienvenus.
+
+---
+
+## ⚠️ Données personnelles & RGPD — à lire avant de l'utiliser
+
+Dans son état actuel, SAGE peut faire transiter des données par un service hébergé (Supabase). **Pendant la bêta, n'entrez pas de données réelles permettant d'identifier des élèves** (noms, prénoms, évaluations nominatives). Utilisez des données de test ou anonymisées (« Élève 1 », « Élève 2 »…).
+
+La trajectoire du projet est un fonctionnement **100 % local** (voir la [feuille de route](#feuille-de-route)), où aucune donnée ne quittera la machine de l'utilisateur. Tant que cette bascule n'est pas faite, considérez cette consigne comme stricte.
+
+---
+
+## Fonctionnalités
+
+- Chargement des données depuis `Référentiel_de_compétences.json`.
+- Sélection en cascade : Cycle → Niveau → Domaine → Sous-domaine → Item → Compétence.
+- Génération d'un **objectif pédagogique** à partir de la compétence choisie (IA).
+- Génération d'une **progression de séquence** à partir des choix et de l'objectif (IA).
+- Préparation d'une **séance détaillée** à partir d'une séance de la progression (IA).
+- Export de la séance préparée en **PDF** (via l'impression du navigateur).
+- Envoi d'une séance dans la **réserve du planning** (lundi → vendredi, 8h–17h).
+- **Bibliothèque persistante** des séances préparées, organisée par cycle / niveau / domaine / sous-domaine / séquence.
+- **Gestion des élèves** dans un tableau éditable.
+- **Suivi des progrès** : évaluations et niveaux d'acquisition.
+- **Cahier journal** avec affichage des évènements Google Agenda.
+- Sauvegarde des données **par utilisateur local**.
+
+---
+
+## Stack technique
+
+- **Next.js** (App Router) — framework React
+- **TypeScript**
+- **Tailwind CSS**
+- **API OpenAI** — génération de contenu pédagogique
+- **Supabase** — persistance (en cours de remplacement, cf. feuille de route)
+- **Electron** — empaquetage application de bureau (en cours)
+
+---
+
+## Prérequis
+
+- **Node.js** 18 ou supérieur et **npm**
+- Une **clé API OpenAI** (chaque utilisateur fournit la sienne — *Bring Your Own Key*)
+- Un **projet Supabase** (le temps de la migration vers un stockage local)
+
+---
 
 ## Installation
 
-Dans ce dossier, lancez :
+Clonez le dépôt, puis dans le dossier du projet :
 
 ```bash
 npm install
 ```
 
-## Configuration OpenAI
+---
 
-Créez un fichier `.env.local` à la racine du projet :
+## Configuration
+
+Créez un fichier `.env.local` à la racine du projet. Ce fichier est ignoré par git (`.gitignore`) et ne doit **jamais** être commité.
+
+Un modèle est fourni dans `.env.example`.
+
+### OpenAI
 
 ```env
 OPENAI_API_KEY=votre_cle_api_openai
 OPENAI_MODEL=gpt-5.4-mini
-
 ```
 
-La clé reste côté serveur grâce à la route `app/api/generate-objective/route.ts`.
+La clé reste côté serveur grâce aux routes API (`app/api/.../route.ts`) et n'est jamais exposée au navigateur.
+
+### Supabase
+
+Créez un projet sur [supabase.com](https://supabase.com), puis récupérez l'URL et les clés dans **Project Settings → API** :
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=https://votre-projet.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=votre_cle_anon
+SUPABASE_SERVICE_ROLE_KEY=votre_cle_service_role
+```
+
+> 🔐 **`SUPABASE_SERVICE_ROLE_KEY` est une clé d'administration : elle contourne les Row Level Security policies.** Elle ne doit être lue que dans des routes serveur, jamais exposée côté client ni embarquée dans un build distribué.
+
+Le schéma de base de données se trouve dans le dossier `supabase/`.
+
+---
 
 ## Démarrage
 
-Puis lancez le serveur de développement :
+Lancez le serveur de développement :
 
 ```bash
 npm run dev
 ```
 
-Ouvrez ensuite :
+Puis ouvrez [http://localhost:3000](http://localhost:3000).
 
-```text
-http://localhost:3000
+---
+
+## Structure du projet
+
+```
+app/
+  page.tsx                      Tableau de bord principal (vue globale de la classe)
+  preparation/page.tsx          Préparation : filtres en cascade + appels IA
+  planning/page.tsx             Planning hebdomadaire (lun→ven, 8h–17h)
+  bibliotheque/page.tsx         Bibliothèque des séances préparées
+  eleves/page.tsx               Tableau de suivi des élèves
+  progression/page.tsx          Suivi des évaluations et niveaux d'acquisition
+  parametres/page.tsx           Choix / création de l'utilisateur local actif
+  api/generate-objective/       Route serveur — objectif pédagogique (OpenAI)
+  api/generate-sequence/        Route serveur — progression de séquence (OpenAI)
+  api/generate-lesson/          Route serveur — séance détaillée (OpenAI)
+  lib/user-storage.ts           Lecture / écriture locale par utilisateur
+  layout.tsx                    Structure globale de l'application
+  globals.css                   Styles globaux + Tailwind
+electron/                       Empaquetage application de bureau
+supabase/                       Schéma de base de données
+Référentiel_de_compétences.json Données du référentiel (issu de l'ancien Excel)
 ```
 
-## Structure des fichiers
-
-- `app/page.tsx` : tableau de bord principal avec navigation et vue globale de la classe.
-- `app/preparation/page.tsx` : page de préparation avec formulaire, filtres en cascade et appels à l'API.
-- `app/api/generate-objective/route.ts` : route serveur qui appelle l'API OpenAI.
-- `app/api/generate-sequence/route.ts` : route serveur qui génère la progression de séquence.
-- `app/api/generate-lesson/route.ts` : route serveur qui prépare une séance détaillée.
-- `app/planning/page.tsx` : page planning du lundi au vendredi, de 8h à 17h, en tranches de 5 minutes.
-- `app/bibliotheque/page.tsx` : bibliothèque des séances préparées, organisée par cycle, niveau, domaine, sous-domaine et séquence.
-- `app/eleves/page.tsx` : tableau de suivi des élèves avec champs éditables et cases à cocher.
-- `app/progression/page.tsx` : suivi des évaluations et des niveaux d'acquisition des élèves.
-- `app/parametres/page.tsx` : choix ou création de l'utilisateur local actif.
-- `app/lib/user-storage.ts` : lecture/écriture locale des données séparées par utilisateur.
-- `app/layout.tsx` : structure globale de l'application Next.js.
-- `app/globals.css` : styles globaux et activation de Tailwind CSS.
-- `Référentiel_de_compétences.json` : données importées depuis l'ancien fichier Excel.
-- `package.json` : dépendances et commandes du projet.
-- `tailwind.config.ts` : configuration Tailwind CSS.
-- `tsconfig.json` : configuration TypeScript.
+---
 
 ## Commandes utiles
 
 ```bash
-npm run dev
-npm run build
-npm run lint
+npm run dev      # serveur de développement
+npm run build    # build de production
+npm run lint     # vérification du code
 ```
+
+---
+
+## Feuille de route
+
+- [ ] **Passage en stockage 100 % local** (SQLite via `better-sqlite3`) et retrait de Supabase — pour que les données ne quittent jamais la machine de l'utilisateur (objectif RGPD).
+- [ ] **Build Electron** distribuable, sans dépendance à un service en ligne.
+- [ ] Modèle **BYOK** généralisé : chaque utilisateur configure sa propre clé OpenAI en local.
+
+---
+
+## Licence
+
+Ce projet est distribué sous licence **Apache 2.0**. Voir le fichier [`LICENSE`](./LICENSE).
+
+En résumé : utilisation, modification et redistribution libres, à condition de conserver les mentions de copyright et de signaler les modifications. Le logiciel est fourni « tel quel », sans garantie.
+
+---
+
+## Auteur
+
+Développé par Étienne dans le cadre de [àlaclé](https://alacle.org).
+
+🌐 [alacle.org](https://alacle.org)
