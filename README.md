@@ -151,9 +151,20 @@ npm run lint     # vérification du code
 
 ## Licence
 
-Ce projet est distribué sous licence **Apache 2.0**. Voir le fichier [`LICENSE`](./LICENSE).
+Ce projet est distribué sous licence **GNU Affero General Public License v3.0 (AGPL-3.0)**. Voir le fichier [`LICENSE`](./LICENSE).
 
-En résumé : utilisation, modification et redistribution libres, à condition de conserver les mentions de copyright et de signaler les modifications. Le logiciel est fourni « tel quel », sans garantie.
+Copyright (C) 2026 Étienne — [àlaclé](https://alacle.org)
+
+En résumé :
+
+- Vous êtes libre d'utiliser, d'étudier, de modifier et de redistribuer SAGE.
+- **Toute version modifiée et redistribuée doit elle-même rester ouverte sous AGPL-3.0** — y compris si elle est mise à disposition via un service en réseau (l'AGPL ferme le « trou SaaS » : héberger une version modifiée oblige à en publier le code source).
+- Les mentions de copyright doivent être conservées et les modifications signalées.
+- Le logiciel est fourni « tel quel », sans aucune garantie.
+
+Ce choix de licence vise à garantir que SAGE **reste libre et ouvert pour toujours** : personne ne peut s'en saisir pour en faire une version fermée et propriétaire. Une version commerciale fermée de SAGE par un tiers est impossible sous cette licence.
+
+> En tant que titulaire des droits, l'auteur conserve la liberté d'utiliser SAGE selon d'autres modalités. L'AGPL ne lie que les tiers.
 
 ---
 
