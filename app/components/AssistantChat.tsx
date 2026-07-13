@@ -45,11 +45,29 @@ type NoteEleve = {
   texte: string;
 };
 
-function buildContext(eleves: Eleve[], evaluations: Evaluation[], notes: NoteEleve[]) {
-  if (eleves.length === 0) {
-    return "Aucun élève enregistré dans la classe.";
+type ReglementInterieur = {
+  texte: string;
+};
+
+function buildContext(
+  eleves: Eleve[],
+  evaluations: Evaluation[],
+  notes: NoteEleve[],
+  reglement: ReglementInterieur | null
+) {
+  const contexteClasse =
+    eleves.length === 0
+      ? "Aucun élève enregistré dans la classe."
+      : buildContexteClasse(eleves, evaluations, notes);
+
+  if (!reglement?.texte) {
+    return contexteClasse;
   }
 
+  return `${contexteClasse}\n\n## Règlement intérieur de l'établissement\n${reglement.texte}`;
+}
+
+function buildContexteClasse(eleves: Eleve[], evaluations: Evaluation[], notes: NoteEleve[]) {
   const elevesMap = new Map(eleves.map((eleve) => [eleve.id, eleve]));
   const elevesList = eleves
     .map((eleve) => {
@@ -139,7 +157,8 @@ export default function AssistantChat() {
     const eleves = readUserData<Eleve[]>("sage-students", []);
     const evaluations = readUserData<Evaluation[]>("sage-evaluations", []);
     const notes = readUserData<NoteEleve[]>("sage-student-notes", []);
-    setContext(buildContext(eleves, evaluations, notes));
+    const reglement = readUserData<ReglementInterieur | null>("sage-reglement-interieur", null);
+    setContext(buildContext(eleves, evaluations, notes, reglement));
   }, [open]);
 
   useEffect(() => {
