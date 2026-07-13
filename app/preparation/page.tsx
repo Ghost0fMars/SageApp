@@ -6,6 +6,9 @@ import { readUserData, writeUserData } from "../lib/user-storage";
 import { readAiConfig } from "../lib/ai-config";
 import { supabase } from "../lib/supabase-client";
 import FicheSeanceModal from "../components/FicheSeanceModal";
+import GeneratingLabel from "../components/GeneratingLabel";
+import { escapeHtml, ouvrirEtImprimer, printBaseStyles, printDocumentHeader } from "../lib/print-document";
+import type { CoursPresentation, CoursSauvegarde } from "../lib/course-types";
 
 type LigneReferentielBrute = {
   Cycle: string;
@@ -155,36 +158,6 @@ type ActiviteEleveSauvegardee = {
   sequenceTitle: string;
   seanceNumero: number;
   activity: FicheActiviteEleve;
-};
-
-type CoursPresentation = {
-  titre: string;
-  niveau: string;
-  objectif: string;
-  slides: {
-    titre: string;
-    type: string;
-    contenu: string[];
-    notes_enseignant: string;
-    interaction: string;
-  }[];
-  deroule_projection: string[];
-  materiel: string[];
-};
-
-type CoursSauvegarde = {
-  id: string;
-  createdAt: string;
-  preparedLessonId?: string;
-  cycle: string;
-  niveau: string;
-  domaine: string;
-  sousDomaine: string;
-  item: string;
-  competence: string;
-  sequenceTitle: string;
-  seanceNumero: number;
-  course: CoursPresentation;
 };
 
 type SequencePreparee = {
@@ -761,13 +734,7 @@ export default function PagePreparation() {
 
   function imprimerSeance() {
     if (!seanceDetaillee) return;
-    const fenetre = window.open("", "_blank", "width=900,height=700");
-    if (!fenetre) return;
-    const e = (s: string) =>
-      s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    const date = new Date().toLocaleDateString("fr-FR", {
-      day: "numeric", month: "long", year: "numeric"
-    });
+    const e = escapeHtml;
     const phasesHtml = seanceDetaillee.phases
       .map(
         (phase, i) => `
@@ -784,37 +751,10 @@ export default function PagePreparation() {
         </section>`
       )
       .join("");
-    fenetre.document.write(`<!DOCTYPE html>
+    const html = `<!DOCTYPE html>
 <html lang="fr"><head><meta charset="UTF-8"><title>${e(seanceDetaillee.titre)}</title>
-<style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: Georgia, serif; font-size: 11pt; line-height: 1.6; color: #111; padding: 1.8cm 2.5cm 2cm; }
-  h1 { font-size: 20pt; font-weight: bold; margin-bottom: 5pt; }
-  h2 { font-size: 13pt; font-weight: bold; margin: 18pt 0 4pt; border-bottom: 1px solid #d1d5db; padding-bottom: 3pt; }
-  h3 { font-size: 9pt; font-weight: bold; text-transform: uppercase; letter-spacing: .07em; margin: 10pt 0 2pt; color: #555; }
-  p { margin-bottom: 6pt; white-space: pre-wrap; }
-  ul { margin: 4pt 0 6pt 1.4em; } li { margin-bottom: 2pt; }
-  .label { font-size: 8pt; font-weight: bold; letter-spacing: .18em; text-transform: uppercase; color: #9ca3af; margin-bottom: 6pt; }
-  .subtitle { font-size: 10pt; color: #6b7280; margin-bottom: 12pt; }
-  .meta { font-size: 9pt; color: #6b7280; margin-bottom: 6pt; font-style: italic; }
-  .intro { margin-bottom: 18pt; padding-bottom: 14pt; border-bottom: 2px solid #111; }
-  .phase { margin-top: 14pt; break-inside: avoid; }
-  .section { margin-top: 14pt; break-inside: avoid; }
-  .doc-header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 7pt; margin-bottom: 18pt; border-bottom: 1px solid #e5e7eb; }
-  .doc-brand { font-size: 8pt; font-weight: bold; letter-spacing: .25em; text-transform: uppercase; color: #d1d5db; }
-  .doc-date { font-size: 8pt; color: #9ca3af; }
-  @page {
-    size: A4;
-    margin: 2cm 2.5cm 2.5cm;
-    @bottom-center { content: "— " counter(page) " —"; font-family: Georgia, serif; font-size: 8pt; color: #9ca3af; }
-    @bottom-right { content: "SAGE"; font-family: Georgia, serif; font-size: 7pt; letter-spacing: .2em; text-transform: uppercase; color: #d1d5db; }
-  }
-  @media print { body { padding: 0; } }
-</style></head><body>
-  <div class="doc-header">
-    <span class="doc-brand">SAGE</span>
-    <span class="doc-date">${date}</span>
-  </div>
+<style>${printBaseStyles()}</style></head><body>
+  ${printDocumentHeader()}
   <div class="intro">
     <p class="label">Fiche de séance</p>
     <h1>${e(seanceDetaillee.titre)}</h1>
@@ -825,10 +765,8 @@ export default function PagePreparation() {
   ${phasesHtml}
   ${seanceDetaillee.trace_ecrite ? `<div class="section"><h2>Trace écrite</h2><p>${e(seanceDetaillee.trace_ecrite)}</p></div>` : ""}
   ${seanceDetaillee.vigilance ? `<div class="section"><h2>Vigilance</h2><p>${e(seanceDetaillee.vigilance)}</p></div>` : ""}
-</body></html>`);
-    fenetre.document.close();
-    fenetre.focus();
-    fenetre.print();
+</body></html>`;
+    ouvrirEtImprimer(html);
   }
 
   function planifierSeance() {
@@ -1005,7 +943,7 @@ export default function PagePreparation() {
             <p className="text-sm font-semibold uppercase tracking-wide text-teal-700">
               Préparer une séquence
             </p>
-            <h1 className="mt-2 text-3xl font-bold text-slate-950 sm:text-4xl">
+            <h1 className="mt-2 text-3xl font-bold text-slate-950">
               {modePrompt ? "Génération par prompt" : "Sélectionner une compétence"}
             </h1>
             <p className="mt-3 max-w-2xl text-base leading-7 text-slate-700">
@@ -1065,7 +1003,15 @@ export default function PagePreparation() {
               disabled={generationPromptEnCours || !promptLibre.trim()}
               className="mt-4 w-full rounded-md bg-teal-700 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-teal-800 focus:outline-none focus:ring-2 focus:ring-teal-300 disabled:cursor-not-allowed disabled:bg-slate-400"
             >
-              {generationPromptEnCours ? "Génération de la séquence..." : "Générer la séquence"}
+              <GeneratingLabel
+                active={generationPromptEnCours}
+                idleLabel="Générer la séquence"
+                messages={[
+                  "Lecture de votre demande...",
+                  "Consultation du référentiel...",
+                  "Construction de la progression..."
+                ]}
+              />
             </button>
           </div>
         ) : (
@@ -1094,7 +1040,7 @@ export default function PagePreparation() {
             </form>
 
             <aside className="min-w-0 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-              <h2 className="text-xl font-semibold text-slate-950">Résultat</h2>
+              <h2 className="text-xl font-bold text-slate-950">Résultat</h2>
 
               <div className="mt-4 rounded-md bg-slate-100 p-4">
                 <p className="text-sm font-medium text-slate-700">Compétence sélectionnée</p>
@@ -1109,7 +1055,11 @@ export default function PagePreparation() {
                 disabled={generationEnCours}
                 className="mt-5 w-full rounded-md bg-teal-700 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-teal-800 focus:outline-none focus:ring-2 focus:ring-teal-300 disabled:cursor-wait disabled:bg-teal-900/60"
               >
-                {generationEnCours ? "Génération..." : "Générer objectif"}
+                <GeneratingLabel
+                  active={generationEnCours}
+                  idleLabel="Générer objectif"
+                  messages={["Analyse de la compétence...", "Rédaction de l'objectif..."]}
+                />
               </button>
 
               {erreur && (
@@ -1132,7 +1082,11 @@ export default function PagePreparation() {
                 disabled={!objectif || sequenceEnCours}
                 className="mt-5 w-full rounded-md bg-slate-900 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-300 disabled:cursor-not-allowed disabled:bg-slate-400"
               >
-                {sequenceEnCours ? "Création de la séquence..." : "Créer la progression de séquence"}
+                <GeneratingLabel
+                  active={sequenceEnCours}
+                  idleLabel="Créer la progression de séquence"
+                  messages={["Répartition des séances...", "Structuration de la progression..."]}
+                />
               </button>
             </aside>
           </div>
@@ -1282,9 +1236,13 @@ export default function PagePreparation() {
                     type="button"
                     onClick={() => genererSeance(seance)}
                     disabled={seanceEnCours !== null}
-                    className="mt-4 rounded-md bg-teal-700 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-teal-800 focus:outline-none focus:ring-2 focus:ring-teal-300 disabled:cursor-wait disabled:bg-teal-900/60"
+                    className="mt-4 min-w-[220px] rounded-md bg-teal-700 px-4 py-2 text-center text-sm font-semibold text-white shadow-sm transition hover:bg-teal-800 focus:outline-none focus:ring-2 focus:ring-teal-300 disabled:cursor-wait disabled:bg-teal-900/60"
                   >
-                    {seanceEnCours === seance.numero ? "Préparation..." : "Préparer cette séance"}
+                    <GeneratingLabel
+                      active={seanceEnCours === seance.numero}
+                      idleLabel="Préparer cette séance"
+                      messages={["Structuration des phases...", "Vérification du matériel..."]}
+                    />
                   </button>
                 </article>
               ))}

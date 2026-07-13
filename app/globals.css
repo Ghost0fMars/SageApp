@@ -209,3 +209,29 @@ select {
     width: 100%;
   }
 }
+
+.ds-generation-spinner {
+  animation: sage-spin 0.8s linear infinite;
+}
+
+@keyframes sage-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes sage-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ds-generation-spinner {
+    animation: sage-pulse 1.6s ease-in-out infinite;
+  }
+}

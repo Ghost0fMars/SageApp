@@ -12,3 +12,9 @@ tsconfig.tsbuildinfo
 
 # Electron build output
 dist-electron/
+
+.impeccable/
+
+CLAUDE.md
+DESIGN.md
+PRODUCT.md

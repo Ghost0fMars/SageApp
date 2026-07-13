@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { lireObjetJsonIa } from "../../lib/ai-json";
 import { callAiProvider, type AiProvider } from "../../lib/ai-provider";
 import { buildReferencesContext } from "../../lib/references";
+import { normaliserEtValiderCours, type CoursPresentation } from "../../lib/course-types";
 
 type PhaseSeanceDetaillee = {
   nom: string;
@@ -25,21 +26,6 @@ type SeanceDetaillee = {
   phases: PhaseSeanceDetaillee[];
   trace_ecrite: string;
   vigilance: string;
-};
-
-type CoursPresentation = {
-  titre: string;
-  niveau: string;
-  objectif: string;
-  slides: {
-    titre: string;
-    type: "accroche" | "recherche" | "mise_en_commun" | "institutionnalisation" | "entrainement" | "synthese";
-    contenu: string[];
-    notes_enseignant: string;
-    interaction: string;
-  }[];
-  deroule_projection: string[];
-  materiel: string[];
 };
 
 type GenerateCourseRequest = {
@@ -78,15 +64,6 @@ function extraireTexteOpenAI(data: OpenAIResponse) {
   );
 }
 
-function coursValide(cours: CoursPresentation) {
-  return (
-    typeof cours.titre === "string" &&
-    typeof cours.objectif === "string" &&
-    Array.isArray(cours.slides) &&
-    cours.slides.length >= 3
-  );
-}
-
 const SYSTEM_PROMPT = `<role>
 Tu es SAGE, un assistant pédagogique expert en conception de supports de cours projetables.
 Tu transformes une fiche de séance enseignant en présentation claire à diffuser en classe.
@@ -100,6 +77,23 @@ Tu transformes une fiche de séance enseignant en présentation claire à diffus
 - Prévois des interactions visibles : question, observation, comparaison, mise en commun, entraînement.
 </principes>
 
+<blocs>
+Chaque diapositive contient une liste ordonnée de "blocs" de contenu (1 à 3 blocs maximum). Types
+disponibles :
+- "text" : liste de points courts projetables (équivalent de l'ancien contenu).
+- "chart" : graphique de données chiffrées (barres, courbes ou camembert) — uniquement si la phase
+  manipule des mesures, comptages, ou données comparables (jamais pour illustrer une idée qualitative).
+- "schema" : diagramme structuré, un seul des variants suivants :
+  - "frise" : évènements datés sur une ligne du temps (2 à 8 évènements).
+  - "cycle" : 3 à 8 étapes qui se répètent en boucle (cycle de l'eau, cycle de vie...).
+  - "etapes" : 2 à 8 étapes d'une démarche ou d'une procédure, non cyclique.
+  - "legende" : figure à légender avec des points numérotés (jamais d'image — l'enseignant l'ajoutera).
+  - "comparaison" : 2 à 3 colonnes comparant des éléments.
+- N'utilise JAMAIS de bloc "media" : les images et vidéos sont ajoutées uniquement par l'enseignant.
+- N'utilise "chart" ou "schema" que lorsque c'est pédagogiquement pertinent pour la phase — la
+  majorité des diapositives peuvent rester en blocs "text" uniquement, comme avant.
+</blocs>
+
 <format_sortie>
 Retourne UNIQUEMENT un JSON valide, sans Markdown :
 {
@@ -110,7 +104,21 @@ Retourne UNIQUEMENT un JSON valide, sans Markdown :
     {
       "titre": "string",
       "type": "accroche | recherche | mise_en_commun | institutionnalisation | entrainement | synthese",
-      "contenu": ["string — ligne courte projetable"],
+      "blocks": [
+        { "type": "text", "lignes": ["string — ligne courte projetable"] }
+        ou { "type": "chart", "chartType": "bar | line | pie", "titre": "string", "unite": "string",
+             "categories": ["string"], "series": [{ "nom": "string", "valeurs": [0] }] }
+        ou { "type": "schema", "variant": "frise", "titre": "string",
+             "evenements": [{ "date": "string", "label": "string", "description": "string" }] }
+        ou { "type": "schema", "variant": "cycle", "titre": "string",
+             "etapes": [{ "label": "string", "description": "string" }] }
+        ou { "type": "schema", "variant": "etapes", "titre": "string",
+             "etapes": [{ "label": "string", "description": "string" }] }
+        ou { "type": "schema", "variant": "legende", "titre": "string",
+             "points": [{ "numero": 1, "x": 50, "y": 50, "label": "string" }] }
+        ou { "type": "schema", "variant": "comparaison", "titre": "string",
+             "colonnes": [{ "titre": "string", "points": ["string"] }] }
+      ],
       "notes_enseignant": "string",
       "interaction": "string — action attendue des élèves"
     }
@@ -178,12 +186,9 @@ export async function POST(request: Request) {
   const systemPrompt = SYSTEM_PROMPT + referencesContext;
   const prompt = buildPrompt(contexte);
 
-  function parseCours(texte: string) {
-    const cours = lireObjetJsonIa<CoursPresentation>(texte);
-    if (!coursValide(cours)) {
-      throw new Error("Le cours généré est incomplet.");
-    }
-    return cours;
+  function parseCours(texte: string): CoursPresentation {
+    const brut = lireObjetJsonIa<Record<string, unknown>>(texte);
+    return normaliserEtValiderCours(brut);
   }
 
   if (aiProvider && aiApiKey && aiProvider !== "none") {
@@ -193,7 +198,7 @@ export async function POST(request: Request) {
         apiKey: aiApiKey,
         system: systemPrompt,
         prompt,
-        maxTokens: 2600
+        maxTokens: 4000
       });
 
       return NextResponse.json({ course: parseCours(texte) });
@@ -234,7 +239,7 @@ export async function POST(request: Request) {
       model: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
       instructions: systemPrompt,
       input: prompt,
-      max_output_tokens: 2600,
+      max_output_tokens: 4000,
       reasoning: { effort: "none" }
     })
   });

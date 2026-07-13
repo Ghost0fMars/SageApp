@@ -142,6 +142,7 @@ export default function TableauDeBord() {
     type: "Classe",
     notes: ""
   });
+  const [ajoutAgendaOuvert, setAjoutAgendaOuvert] = useState(false);
 
   useEffect(() => {
     setUser(getCurrentUser());
@@ -261,7 +262,7 @@ export default function TableauDeBord() {
             Tableau de bord
           </p>
           <h1 className="mt-2 text-3xl font-bold">Bonjour {user?.name ?? ""}</h1>
-          <p className="mt-2 text-slate-600">
+          <p className="mt-2 max-w-2xl leading-7 text-slate-700">
             Vue globale de la classe, des préparations et des prochains temps de la semaine.
           </p>
         </header>
@@ -277,20 +278,18 @@ export default function TableauDeBord() {
               key={stat.label}
               className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"
             >
-              <p className="text-sm font-semibold uppercase tracking-wide text-slate-500">
-                {stat.label}
-              </p>
+              <p className="text-sm font-medium text-slate-500">{stat.label}</p>
               <p className="mt-6 text-4xl font-bold">{stat.value}</p>
             </article>
           ))}
         </section>
 
-        <section className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+        <section className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_300px]">
           <article className="rounded-lg bg-slate-950 p-6 text-white shadow-sm">
-            <p className="text-sm font-semibold uppercase tracking-wide text-teal-200">
+            <p className="text-sm font-semibold uppercase tracking-wide text-white/70">
               Focus du moment
             </p>
-            <h2 className="mt-8 text-3xl font-bold">
+            <h2 className="mt-8 text-4xl font-bold">
               {focus?.titreSequence ?? "Aucune séance planifiée"}
             </h2>
             <p className="mt-4 max-w-2xl leading-7 text-slate-300">
@@ -302,19 +301,17 @@ export default function TableauDeBord() {
             </p>
             <a
               href="/planning"
-              className="mt-8 inline-flex rounded-md bg-teal-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-teal-700"
+              className="mt-8 inline-flex rounded-md bg-teal-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-100"
             >
               Ouvrir le planning
             </a>
           </article>
 
-          <article className="rounded-lg bg-teal-600 p-6 text-white shadow-sm">
-            <p className="text-sm font-semibold uppercase tracking-wide text-teal-100">
-              Progression programmes
-            </p>
-            <p className="mt-10 text-5xl font-bold">{progression}%</p>
-            <p className="mt-3 font-semibold">Préparations enregistrées</p>
-            <div className="mt-8 h-2 rounded-full bg-white/25">
+          <article className="rounded-lg bg-teal-600 p-5 text-white shadow-sm">
+            <p className="text-sm font-semibold text-white/70">Progression du programme</p>
+            <p className="mt-3 text-3xl font-bold">{progression}%</p>
+            <p className="mt-1 text-sm text-white/80">Préparations enregistrées</p>
+            <div className="mt-5 h-2 rounded-full bg-white/25">
               <div className="h-2 rounded-full bg-white" style={{ width: `${progression}%` }} />
             </div>
           </article>
@@ -344,7 +341,10 @@ export default function TableauDeBord() {
                     </option>
                   ))}
                 </select>
-                <a href="/planning" className="text-sm font-semibold text-teal-700">
+                <a
+                  href="/planning"
+                  className="rounded-sm text-sm font-semibold text-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-100"
+                >
                   Voir tout
                 </a>
               </div>
@@ -377,112 +377,6 @@ export default function TableauDeBord() {
                 </article>
               ))}
             </div>
-
-            <section className="mt-6 rounded-md border border-slate-200 bg-slate-50 p-4">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <h3 className="text-lg font-bold text-slate-950">Agenda</h3>
-                  <p className="mt-1 text-sm text-slate-600">
-                    {moisAgenda ? formatMois(moisAgenda) : "Choisir une date"}
-                  </p>
-                </div>
-                <input
-                  type="date"
-                  value={dateAgenda}
-                  onChange={(event) => setDateAgenda(event.target.value)}
-                  className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
-                />
-              </div>
-
-              <div className="mt-4 grid gap-3 rounded-md bg-white p-3 md:grid-cols-[minmax(0,1fr)_120px_150px]">
-                <input
-                  type="text"
-                  value={nouvelEvenement.title}
-                  onChange={(event) =>
-                    setNouvelEvenement((actuel) => ({ ...actuel, title: event.target.value }))
-                  }
-                  placeholder="Conseil d'école, réunion, sortie, rendez-vous..."
-                  className="rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
-                />
-                <input
-                  type="time"
-                  value={nouvelEvenement.time}
-                  onChange={(event) =>
-                    setNouvelEvenement((actuel) => ({ ...actuel, time: event.target.value }))
-                  }
-                  className="rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
-                />
-                <select
-                  value={nouvelEvenement.type}
-                  onChange={(event) =>
-                    setNouvelEvenement((actuel) => ({ ...actuel, type: event.target.value }))
-                  }
-                  className="rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
-                >
-                  {typesEvenements.map((type) => (
-                    <option key={type} value={type}>
-                      {type}
-                    </option>
-                  ))}
-                </select>
-                <textarea
-                  value={nouvelEvenement.notes}
-                  onChange={(event) =>
-                    setNouvelEvenement((actuel) => ({ ...actuel, notes: event.target.value }))
-                  }
-                  placeholder="Notes facultatives"
-                  rows={2}
-                  className="rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100 md:col-span-2"
-                />
-                <button
-                  type="button"
-                  onClick={ajouterEvenementAgenda}
-                  className="rounded-md bg-teal-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-teal-800"
-                >
-                  Ajouter
-                </button>
-              </div>
-
-              <div className="mt-4 grid gap-3">
-                {evenementsParJour.length === 0 && (
-                  <p className="rounded-md bg-white p-3 text-sm text-slate-600">
-                    Aucun évènement ce mois-ci.
-                  </p>
-                )}
-                {evenementsParJour.map(([date, evts]) => (
-                  <div key={date}>
-                    <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      {formatDateLongue(date)}
-                    </p>
-                    <div className="grid gap-2">
-                      {evts.map((evenement) => (
-                        <article
-                          key={evenement.id}
-                          className="flex flex-wrap items-start justify-between gap-3 rounded-md bg-white p-3"
-                        >
-                          <div>
-                            <p className="text-sm font-semibold opacity-75">
-                              {evenement.time} · {evenement.type}
-                            </p>
-                            <h4 className="font-bold text-slate-950">{evenement.title}</h4>
-                            {evenement.notes && (
-                              <p className="mt-1 text-sm text-slate-600">{evenement.notes}</p>
-                            )}
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => supprimerEvenementAgenda(evenement.id)}
-                            className="rounded-md border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
-                          >
-                            Supprimer
-                          </button>
-                        </article>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
           </article>
 
           <article className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
@@ -495,6 +389,127 @@ export default function TableauDeBord() {
               <p className="mt-3 text-4xl font-bold">{eleves.length}</p>
             </div>
           </article>
+        </section>
+
+        <section className="mt-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-xl font-bold">Agenda</h2>
+              <p className="mt-1 text-sm text-slate-600">
+                {moisAgenda ? formatMois(moisAgenda) : "Choisir une date"}
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <input
+                type="date"
+                value={dateAgenda}
+                onChange={(event) => setDateAgenda(event.target.value)}
+                className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
+              />
+              <button
+                type="button"
+                onClick={() => setAjoutAgendaOuvert((ouvert) => !ouvert)}
+                className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-100"
+              >
+                {ajoutAgendaOuvert ? "Fermer" : "+ Ajouter"}
+              </button>
+            </div>
+          </div>
+
+          {ajoutAgendaOuvert && (
+            <div className="mt-4 grid gap-3 rounded-md bg-slate-50 p-3 md:grid-cols-[minmax(0,1fr)_120px_150px]">
+              <input
+                type="text"
+                value={nouvelEvenement.title}
+                onChange={(event) =>
+                  setNouvelEvenement((actuel) => ({ ...actuel, title: event.target.value }))
+                }
+                placeholder="Conseil d'école, réunion, sortie, rendez-vous..."
+                className="rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
+              />
+              <input
+                type="time"
+                value={nouvelEvenement.time}
+                onChange={(event) =>
+                  setNouvelEvenement((actuel) => ({ ...actuel, time: event.target.value }))
+                }
+                className="rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
+              />
+              <select
+                value={nouvelEvenement.type}
+                onChange={(event) =>
+                  setNouvelEvenement((actuel) => ({ ...actuel, type: event.target.value }))
+                }
+                className="rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
+              >
+                {typesEvenements.map((type) => (
+                  <option key={type} value={type}>
+                    {type}
+                  </option>
+                ))}
+              </select>
+              <textarea
+                value={nouvelEvenement.notes}
+                onChange={(event) =>
+                  setNouvelEvenement((actuel) => ({ ...actuel, notes: event.target.value }))
+                }
+                placeholder="Notes facultatives"
+                rows={2}
+                className="rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100 md:col-span-2"
+              />
+              <button
+                type="button"
+                onClick={ajouterEvenementAgenda}
+                className="rounded-md bg-teal-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-teal-800 focus:outline-none focus:ring-2 focus:ring-teal-100"
+              >
+                Ajouter
+              </button>
+            </div>
+          )}
+
+          <div className="mt-4 grid gap-3">
+            {evenementsParJour.length === 0 && (
+              <p className="rounded-md bg-slate-50 p-3 text-sm text-slate-600">
+                Aucun évènement ce mois-ci.
+              </p>
+            )}
+            {evenementsParJour.map(([date, evts]) => (
+              <div key={date}>
+                <p className="mb-1 text-xs font-semibold text-slate-500">
+                  {formatDateLongue(date)}
+                </p>
+                <div className="grid gap-2">
+                  {evts.map((evenement) => (
+                    <article
+                      key={evenement.id}
+                      className="flex flex-wrap items-start justify-between gap-3 rounded-md bg-slate-50 p-3"
+                    >
+                      <div>
+                        <p className="text-sm font-semibold opacity-75">
+                          {evenement.time} · {evenement.type}
+                        </p>
+                        <h4 className="font-bold text-slate-950">{evenement.title}</h4>
+                        {evenement.notes && (
+                          <p className="mt-1 text-sm text-slate-600">{evenement.notes}</p>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (window.confirm(`Supprimer « ${evenement.title} » de l'agenda ?`)) {
+                            supprimerEvenementAgenda(evenement.id);
+                          }
+                        }}
+                        className="rounded-md border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-100"
+                      >
+                        Supprimer
+                      </button>
+                    </article>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
         </section>
       </div>
     </main>

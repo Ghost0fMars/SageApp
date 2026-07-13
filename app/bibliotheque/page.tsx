@@ -7,6 +7,15 @@ import { readUserData, writeUserData } from "../lib/user-storage";
 import FicheSeanceModal, { type SeanceDetaillee } from "../components/FicheSeanceModal";
 import FicheEleveViewer from "../components/FicheEleveViewer";
 import CoursViewer from "../components/CoursViewer";
+import TreeDisclosure from "../components/TreeDisclosure";
+import { escapeHtml, ouvrirEtImprimer, printBaseStyles, printDocumentHeader } from "../lib/print-document";
+import {
+  migrerCoursLegacy,
+  type CoursPresentation,
+  type CoursSauvegarde,
+  type Slide
+} from "../lib/course-types";
+import { imprimerCours } from "../lib/print-cours";
 
 type Beat = {
   amorce: string;
@@ -98,36 +107,6 @@ type ActiviteEleveSauvegardee = {
   activity: FicheActiviteEleve;
 };
 
-type CoursPresentation = {
-  titre: string;
-  niveau: string;
-  objectif: string;
-  slides: {
-    titre: string;
-    type: string;
-    contenu: string[];
-    notes_enseignant: string;
-    interaction: string;
-  }[];
-  deroule_projection: string[];
-  materiel: string[];
-};
-
-type CoursSauvegarde = {
-  id: string;
-  createdAt: string;
-  preparedLessonId?: string;
-  cycle: string;
-  niveau: string;
-  domaine: string;
-  sousDomaine: string;
-  item: string;
-  competence: string;
-  sequenceTitle: string;
-  seanceNumero: number;
-  course: CoursPresentation;
-};
-
 type TuilePlanning = {
   id: string;
   preparedLessonId?: string;
@@ -201,15 +180,7 @@ function ajouterAuPlanning(seance: SeancePreparee) {
 }
 
 function imprimerFiche(fiche: SeancePreparee) {
-  const fenetre = window.open("", "_blank", "width=900,height=700");
-  if (!fenetre) return;
-
-  const e = (s: string) =>
-    s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-
-  const date = new Date().toLocaleDateString("fr-FR", {
-    day: "numeric", month: "long", year: "numeric"
-  });
+  const e = escapeHtml;
 
   const phasesHtml = (fiche.lesson.phases ?? [])
     .map(
@@ -233,38 +204,10 @@ function imprimerFiche(fiche: SeancePreparee) {
 <head>
   <meta charset="UTF-8">
   <title>${e(fiche.lesson.titre)}</title>
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: Georgia, serif; font-size: 11pt; line-height: 1.6; color: #111; padding: 1.8cm 2.5cm 2cm; }
-    h1 { font-size: 20pt; font-weight: bold; margin-bottom: 5pt; }
-    h2 { font-size: 13pt; font-weight: bold; margin: 18pt 0 4pt; border-bottom: 1px solid #d1d5db; padding-bottom: 3pt; }
-    h3 { font-size: 9pt; font-weight: bold; text-transform: uppercase; letter-spacing: .07em; margin: 10pt 0 2pt; color: #555; }
-    p { margin-bottom: 6pt; white-space: pre-wrap; }
-    ul { margin: 4pt 0 6pt 1.4em; }
-    li { margin-bottom: 2pt; }
-    .label { font-size: 8pt; font-weight: bold; letter-spacing: .18em; text-transform: uppercase; color: #9ca3af; margin-bottom: 6pt; }
-    .subtitle { font-size: 10pt; color: #6b7280; margin-bottom: 12pt; }
-    .meta { font-size: 9pt; color: #6b7280; margin-bottom: 6pt; font-style: italic; }
-    .intro { margin-bottom: 18pt; padding-bottom: 14pt; border-bottom: 2px solid #111; }
-    .phase { margin-top: 14pt; break-inside: avoid; }
-    .section { margin-top: 14pt; break-inside: avoid; }
-    .doc-header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 7pt; margin-bottom: 18pt; border-bottom: 1px solid #e5e7eb; }
-    .doc-brand { font-size: 8pt; font-weight: bold; letter-spacing: .25em; text-transform: uppercase; color: #d1d5db; }
-    .doc-date { font-size: 8pt; color: #9ca3af; }
-    @page {
-      size: A4;
-      margin: 2cm 2.5cm 2.5cm;
-      @bottom-center { content: "— " counter(page) " —"; font-family: Georgia, serif; font-size: 8pt; color: #9ca3af; }
-      @bottom-right { content: "SAGE"; font-family: Georgia, serif; font-size: 7pt; letter-spacing: .2em; text-transform: uppercase; color: #d1d5db; }
-    }
-    @media print { body { padding: 0; } }
-  </style>
+  <style>${printBaseStyles()}</style>
 </head>
 <body>
-  <div class="doc-header">
-    <span class="doc-brand">SAGE</span>
-    <span class="doc-date">${date}</span>
-  </div>
+  ${printDocumentHeader()}
   <div class="intro">
     <p class="label">Fiche de séance</p>
     <h1>${e(fiche.lesson.titre)}</h1>
@@ -278,10 +221,12 @@ function imprimerFiche(fiche: SeancePreparee) {
 </body>
 </html>`;
 
-  fenetre.document.write(html);
-  fenetre.document.close();
-  fenetre.focus();
-  fenetre.print();
+  ouvrirEtImprimer(html);
+}
+
+function apercuSlide(slide: Slide): string | undefined {
+  const blocTexte = slide.blocks.find((b) => b.type === "text");
+  return blocTexte && blocTexte.type === "text" ? blocTexte.lignes[0] : undefined;
 }
 
 export default function BibliothequePage() {
@@ -319,7 +264,7 @@ export default function BibliothequePage() {
           COURSE_PRESENTATIONS_STORAGE_KEY,
           [],
           COURSE_PRESENTATIONS_STORAGE_KEY
-        )
+        ).map((c) => ({ ...c, course: migrerCoursLegacy(c.course) }))
       );
       setTuilesPlanning(
         readUserData<TuilePlanning[]>(PLANNING_STORAGE_KEY, [], PLANNING_STORAGE_KEY)
@@ -681,6 +626,28 @@ export default function BibliothequePage() {
     setMessage(`La séquence "${sequence.sequence.titre}" a été supprimée.`);
   }
 
+  function supprimerActivite(activite: ActiviteEleveSauvegardee) {
+    const confirmation = window.confirm(
+      `Supprimer la fiche élève "${activite.activity.titre}" ?`
+    );
+    if (!confirmation) return;
+
+    const prochainesActivites = activites.filter((item) => item.id !== activite.id);
+    setActivites(prochainesActivites);
+    writeUserData(STUDENT_ACTIVITIES_STORAGE_KEY, prochainesActivites);
+    setMessage(`La fiche "${activite.activity.titre}" a été supprimée.`);
+  }
+
+  function supprimerCours(item: CoursSauvegarde) {
+    const confirmation = window.confirm(`Supprimer le cours "${item.course.titre}" ?`);
+    if (!confirmation) return;
+
+    const prochainsCours = cours.filter((c) => c.id !== item.id);
+    setCours(prochainsCours);
+    writeUserData(COURSE_PRESENTATIONS_STORAGE_KEY, prochainsCours);
+    setMessage(`Le cours "${item.course.titre}" a été supprimé.`);
+  }
+
   return (
     <main className="min-h-screen bg-slate-50 px-4 py-8 sm:px-6 lg:px-8">
       <section className="mx-auto max-w-6xl">
@@ -747,8 +714,11 @@ export default function BibliothequePage() {
         </div>
 
         {dossierActif === "preparations" && sequences.length === 0 && (
-          <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-            Aucune s&eacute;quence enregistr&eacute;e pour le moment.
+          <div className="rounded-lg border border-dashed border-slate-300 bg-white p-6 text-slate-700">
+            <h2 className="text-lg font-semibold text-slate-950">Préparations</h2>
+            <p className="mt-2 leading-7">
+              Les séquences générées depuis la préparation apparaîtront ici.
+            </p>
           </div>
         )}
 
@@ -756,34 +726,37 @@ export default function BibliothequePage() {
           <div className="grid gap-4">
             {activites.length === 0 ? (
               <div className="rounded-lg border border-dashed border-slate-300 bg-white p-6 text-slate-700">
-                <h2 className="text-lg font-semibold text-slate-950">Activit&eacute;s</h2>
+                <h2 className="text-lg font-semibold text-slate-950">Activités</h2>
                 <p className="mt-2 leading-7">
-                  Les fiches &eacute;l&egrave;ves g&eacute;n&eacute;r&eacute;es depuis une fiche de s&eacute;ance
-                  appara&icirc;tront ici.
+                  Les fiches élèves générées depuis une fiche de séance apparaîtront ici.
                 </p>
               </div>
             ) : (
               Object.entries(dossiersActivites).map(([niveau, domaines]) => (
-                <details key={niveau} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm" open>
-                  <summary className="cursor-pointer text-xl font-bold text-slate-950">{niveau}</summary>
-                  <div className="mt-4 grid gap-3 pl-4">
-                    {Object.entries(domaines).map(([domaine, listeActivites]) => {
-                      const couleur = getDisciplineColor(domaine);
-                      return (
-                        <details
-                          key={domaine}
-                          className="rounded-md border border-l-[6px] p-3"
-                          style={{ backgroundColor: couleur.softBackground, borderColor: couleur.border, color: couleur.text }}
-                          open
-                        >
-                          <summary className="cursor-pointer font-semibold">
+                <TreeDisclosure
+                  key={niveau}
+                  heading
+                  defaultOpen
+                  className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
+                  summary={niveau}
+                >
+                  {Object.entries(domaines).map(([domaine, listeActivites]) => {
+                    const couleur = getDisciplineColor(domaine);
+                    return (
+                      <TreeDisclosure
+                        key={domaine}
+                        defaultOpen
+                        summary={
+                          <span
+                            className="rounded-full px-2.5 py-1 text-sm font-semibold"
+                            style={{ backgroundColor: couleur.softBackground, color: couleur.text }}
+                          >
                             {domaine}
-                            <span className="ml-2 rounded-full bg-white/60 px-2 py-0.5 text-xs font-semibold" style={{ color: couleur.text }}>
-                              {listeActivites.length}
-                            </span>
-                          </summary>
-                          <div className="mt-3 grid gap-3">
-                            {listeActivites.map((activite) => (
+                          </span>
+                        }
+                        meta={<span className="text-sm text-slate-400">{listeActivites.length}</span>}
+                      >
+                        {listeActivites.map((activite) => (
                               <article
                                 key={activite.id}
                                 className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"
@@ -815,6 +788,13 @@ export default function BibliothequePage() {
                                         <rect x="6" y="14" width="12" height="8"/>
                                       </svg>
                                       Ouvrir / Imprimer
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => supprimerActivite(activite)}
+                                      className="rounded-md bg-red-700 px-3 py-2 text-xs font-semibold text-white transition hover:bg-red-800"
+                                    >
+                                      Supprimer
                                     </button>
                                   </div>
                                 </div>
@@ -856,13 +836,11 @@ export default function BibliothequePage() {
                                   )}
                                 </div>
                               </article>
-                            ))}
-                          </div>
-                        </details>
-                      );
-                    })}
-                  </div>
-                </details>
+                        ))}
+                      </TreeDisclosure>
+                    );
+                  })}
+                </TreeDisclosure>
               ))
             )}
           </div>
@@ -874,32 +852,35 @@ export default function BibliothequePage() {
               <div className="rounded-lg border border-dashed border-slate-300 bg-white p-6 text-slate-700">
                 <h2 className="text-lg font-semibold text-slate-950">Cours</h2>
                 <p className="mt-2 leading-7">
-                  Les pr&eacute;sentations enseignant g&eacute;n&eacute;r&eacute;es depuis une fiche de s&eacute;ance
-                  appara&icirc;tront ici.
+                  Les présentations enseignant générées depuis une fiche de séance apparaîtront ici.
                 </p>
               </div>
             ) : (
               Object.entries(dossiersCours).map(([niveau, domaines]) => (
-                <details key={niveau} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm" open>
-                  <summary className="cursor-pointer text-xl font-bold text-slate-950">{niveau}</summary>
-                  <div className="mt-4 grid gap-3 pl-4">
-                    {Object.entries(domaines).map(([domaine, listeCours]) => {
-                      const couleur = getDisciplineColor(domaine);
-                      return (
-                        <details
-                          key={domaine}
-                          className="rounded-md border border-l-[6px] p-3"
-                          style={{ backgroundColor: couleur.softBackground, borderColor: couleur.border, color: couleur.text }}
-                          open
-                        >
-                          <summary className="cursor-pointer font-semibold">
+                <TreeDisclosure
+                  key={niveau}
+                  heading
+                  defaultOpen
+                  className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
+                  summary={niveau}
+                >
+                  {Object.entries(domaines).map(([domaine, listeCours]) => {
+                    const couleur = getDisciplineColor(domaine);
+                    return (
+                      <TreeDisclosure
+                        key={domaine}
+                        defaultOpen
+                        summary={
+                          <span
+                            className="rounded-full px-2.5 py-1 text-sm font-semibold"
+                            style={{ backgroundColor: couleur.softBackground, color: couleur.text }}
+                          >
                             {domaine}
-                            <span className="ml-2 rounded-full bg-white/60 px-2 py-0.5 text-xs font-semibold" style={{ color: couleur.text }}>
-                              {listeCours.length}
-                            </span>
-                          </summary>
-                          <div className="mt-3 grid gap-3">
-                            {listeCours.map((item) => (
+                          </span>
+                        }
+                        meta={<span className="text-sm text-slate-400">{listeCours.length}</span>}
+                      >
+                        {listeCours.map((item) => (
                               <article
                                 key={item.id}
                                 className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"
@@ -931,6 +912,13 @@ export default function BibliothequePage() {
                                       </svg>
                                       Projeter
                                     </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => supprimerCours(item)}
+                                      className="rounded-md bg-red-700 px-3 py-2 text-xs font-semibold text-white transition hover:bg-red-800"
+                                    >
+                                      Supprimer
+                                    </button>
                                   </div>
                                 </div>
 
@@ -946,8 +934,8 @@ export default function BibliothequePage() {
                                         {index + 1} · {slide.type}
                                       </p>
                                       <p className="text-xs font-bold text-white leading-snug line-clamp-2">{slide.titre}</p>
-                                      {slide.contenu[0] && (
-                                        <p className="mt-1 text-xs text-slate-400 line-clamp-2 leading-snug">{slide.contenu[0]}</p>
+                                      {apercuSlide(slide) && (
+                                        <p className="mt-1 text-xs text-slate-400 line-clamp-2 leading-snug">{apercuSlide(slide)}</p>
                                       )}
                                     </button>
                                   ))}
@@ -964,13 +952,11 @@ export default function BibliothequePage() {
                                   </div>
                                 )}
                               </article>
-                            ))}
-                          </div>
-                        </details>
-                      );
-                    })}
-                  </div>
-                </details>
+                        ))}
+                      </TreeDisclosure>
+                    );
+                  })}
+                </TreeDisclosure>
               ))
             )}
           </div>
@@ -979,118 +965,126 @@ export default function BibliothequePage() {
         {dossierActif === "preparations" && (
           <div className="grid gap-4">
           {Object.entries(dossiers).map(([cycle, niveaux]) => (
-            <details key={cycle} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-              <summary className="cursor-pointer text-xl font-bold text-slate-950">{cycle}</summary>
-
-              <div className="mt-4 grid gap-3 pl-4">
-                {Object.entries(niveaux).map(([niveau, domaines]) => (
-                  <details key={niveau} className="rounded-md bg-slate-50 p-3">
-                    <summary className="cursor-pointer font-semibold text-slate-950">{niveau}</summary>
-
-                    <div className="mt-3 grid gap-3 pl-4">
-                      {Object.entries(domaines).map(([domaine, sousDomaines]) => {
-                        const couleur = getDisciplineColor(domaine);
-                        return (
-                          <details
-                            key={domaine}
-                            className="rounded-md border border-l-[6px] p-3"
-                            style={{ backgroundColor: couleur.softBackground, borderColor: couleur.border, color: couleur.text }}
+            <TreeDisclosure
+              key={cycle}
+              heading
+              className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
+              summary={cycle}
+            >
+              {Object.entries(niveaux).map(([niveau, domaines]) => (
+                <TreeDisclosure key={niveau} summary={niveau}>
+                  {Object.entries(domaines).map(([domaine, sousDomaines]) => {
+                    const couleur = getDisciplineColor(domaine);
+                    return (
+                      <TreeDisclosure
+                        key={domaine}
+                        summary={
+                          <span
+                            className="rounded-full px-2.5 py-1 text-sm font-semibold"
+                            style={{ backgroundColor: couleur.softBackground, color: couleur.text }}
                           >
-                            <summary className="cursor-pointer font-semibold">{domaine}</summary>
+                            {domaine}
+                          </span>
+                        }
+                      >
+                        {Object.entries(sousDomaines).map(([sousDomaine, listeSequences]) => (
+                          <TreeDisclosure key={sousDomaine} summary={sousDomaine}>
+                            {listeSequences.map((sequence) => (
+                              <TreeDisclosure
+                                key={sequence.id}
+                                className="rounded-md border bg-white p-4"
+                                style={{ borderColor: getDisciplineColor(sequence.domaine).border }}
+                                contentClassName="mt-4 grid gap-3"
+                                summary={
+                                  <span>
+                                    <span className="font-semibold text-slate-950">
+                                      Séquence · {sequence.sequence.titre}
+                                    </span>
+                                    <span className="ml-2 text-sm text-slate-500">
+                                      {sequence.sequence.seances.length} séance(s)
+                                      {sequence.sequence.regime && (
+                                        <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">
+                                          {sequence.sequence.regime}
+                                        </span>
+                                      )}
+                                    </span>
+                                  </span>
+                                }
+                                meta={
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      supprimerSequence(sequence);
+                                    }}
+                                    className="rounded-md bg-red-700 px-3 py-2 text-xs font-semibold text-white transition hover:bg-red-800"
+                                  >
+                                    Supprimer
+                                  </button>
+                                }
+                              >
+                                <label className="grid gap-2">
+                                  <span className="text-sm font-semibold text-slate-700">
+                                    Titre de la séquence
+                                  </span>
+                                  <input
+                                    value={sequence.sequence.titre}
+                                    onChange={(e) =>
+                                      modifierSequenceSauvegardee(sequence, {
+                                        ...sequence.sequence,
+                                        titre: e.target.value
+                                      })
+                                    }
+                                    className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 font-semibold text-slate-950 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
+                                  />
+                                </label>
+                                <label className="grid gap-2 text-sm leading-6 text-slate-700">
+                                  <span className="font-semibold text-slate-950">
+                                    Intention générale
+                                  </span>
+                                  <textarea
+                                    value={sequence.sequence.intention}
+                                    onChange={(e) =>
+                                      modifierSequenceSauvegardee(sequence, {
+                                        ...sequence.sequence,
+                                        intention: e.target.value
+                                      })
+                                    }
+                                    className="min-h-20 w-full rounded-md border border-slate-300 bg-white px-3 py-2 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
+                                  />
+                                </label>
+                                <p className="mt-2 text-sm leading-6 text-slate-700">
+                                  <span className="font-semibold text-slate-950">Objectif :</span>{" "}
+                                  {sequence.objectif}
+                                </p>
 
-                            <div className="mt-3 grid gap-3 pl-4">
-                              {Object.entries(sousDomaines).map(([sousDomaine, listeSequences]) => (
                                 <details
-                                  key={sousDomaine}
-                                  className="rounded-md border bg-white/70 p-3"
-                                  style={{ borderColor: getDisciplineColor(domaine).border }}
+                                  className="group mt-4 rounded-md border p-3"
+                                  style={{
+                                    backgroundColor: getDisciplineColor(sequence.domaine).softBackground,
+                                    borderColor: getDisciplineColor(sequence.domaine).border,
+                                    color: getDisciplineColor(sequence.domaine).text
+                                  }}
+                                  open
                                 >
-                                  <summary className="cursor-pointer font-semibold">{sousDomaine}</summary>
+                                  <summary className="flex cursor-pointer list-none items-center gap-2 text-sm font-semibold text-teal-700 [&::-webkit-details-marker]:hidden">
+                                    <svg
+                                      className="h-3.5 w-3.5 shrink-0 transition-transform duration-150 group-open:rotate-90 motion-reduce:transition-none"
+                                      viewBox="0 0 24 24"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      strokeWidth="2.5"
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      aria-hidden="true"
+                                    >
+                                      <polyline points="9 6 15 12 9 18" />
+                                    </svg>
+                                    Voir la progression
+                                  </summary>
 
-                                  <div className="mt-3 grid gap-3 pl-4">
-                                    {listeSequences.map((sequence) => (
-                                      <details
-                                        key={sequence.id}
-                                        className="rounded-md border bg-white p-4"
-                                        style={{ borderColor: getDisciplineColor(sequence.domaine).border }}
-                                      >
-                                        <summary className="grid cursor-pointer grid-cols-[1fr_auto] items-center gap-3">
-                                          <span>
-                                            <span className="font-semibold text-slate-950">
-                                              Séquence · {sequence.sequence.titre}
-                                            </span>
-                                            <span className="ml-2 text-sm text-slate-500">
-                                              {sequence.sequence.seances.length} séance(s)
-                                              {sequence.sequence.regime && (
-                                                <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">
-                                                  {sequence.sequence.regime}
-                                                </span>
-                                              )}
-                                            </span>
-                                          </span>
-                                          <button
-                                            type="button"
-                                            onClick={(e) => {
-                                              e.preventDefault();
-                                              e.stopPropagation();
-                                              supprimerSequence(sequence);
-                                            }}
-                                            className="rounded-md bg-red-700 px-3 py-2 text-xs font-semibold text-white transition hover:bg-red-800"
-                                          >
-                                            Supprimer
-                                          </button>
-                                        </summary>
-
-                                        <div className="mt-4 grid gap-3">
-                                          <label className="grid gap-2">
-                                            <span className="text-sm font-semibold text-slate-700">
-                                              Titre de la séquence
-                                            </span>
-                                            <input
-                                              value={sequence.sequence.titre}
-                                              onChange={(e) =>
-                                                modifierSequenceSauvegardee(sequence, {
-                                                  ...sequence.sequence,
-                                                  titre: e.target.value
-                                                })
-                                              }
-                                              className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 font-semibold text-slate-950 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
-                                            />
-                                          </label>
-                                          <label className="grid gap-2 text-sm leading-6 text-slate-700">
-                                            <span className="font-semibold text-slate-950">
-                                              Intention générale
-                                            </span>
-                                            <textarea
-                                              value={sequence.sequence.intention}
-                                              onChange={(e) =>
-                                                modifierSequenceSauvegardee(sequence, {
-                                                  ...sequence.sequence,
-                                                  intention: e.target.value
-                                                })
-                                              }
-                                              className="min-h-20 w-full rounded-md border border-slate-300 bg-white px-3 py-2 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
-                                            />
-                                          </label>
-                                          <p className="mt-2 text-sm leading-6 text-slate-700">
-                                            <span className="font-semibold text-slate-950">Objectif :</span>{" "}
-                                            {sequence.objectif}
-                                          </p>
-
-                                          <details
-                                            className="mt-4 rounded-md border p-3"
-                                            style={{
-                                              backgroundColor: getDisciplineColor(sequence.domaine).softBackground,
-                                              borderColor: getDisciplineColor(sequence.domaine).border,
-                                              color: getDisciplineColor(sequence.domaine).text
-                                            }}
-                                            open
-                                          >
-                                            <summary className="cursor-pointer text-sm font-semibold text-teal-700">
-                                              Voir la progression
-                                            </summary>
-
-                                            <div className="mt-3 grid gap-3">
+                                  <div className="mt-3 grid gap-3">
                                               {sequence.sequence.seances
                                                 .sort((a, b) => a.numero - b.numero)
                                                 .map((seance) => {
@@ -1178,23 +1172,18 @@ export default function BibliothequePage() {
                                                     </article>
                                                   );
                                                 })}
-                                            </div>
-                                          </details>
-                                        </div>
-                                      </details>
-                                    ))}
                                   </div>
                                 </details>
-                              ))}
-                            </div>
-                          </details>
-                        );
-                      })}
-                    </div>
-                  </details>
-                ))}
-              </div>
-            </details>
+                              </TreeDisclosure>
+                            ))}
+                          </TreeDisclosure>
+                        ))}
+                      </TreeDisclosure>
+                    );
+                  })}
+                </TreeDisclosure>
+              ))}
+            </TreeDisclosure>
           ))}
           </div>
         )}
@@ -1260,6 +1249,7 @@ export default function BibliothequePage() {
             writeUserData(COURSE_PRESENTATIONS_STORAGE_KEY, prochainsCours);
             setCoursEnViewer(updated);
           }}
+          onPrint={() => imprimerCours(coursEnViewer.course)}
         />
       )}
     </main>

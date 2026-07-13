@@ -383,7 +383,7 @@ export default function ElevesPage() {
                 {colonnesBooleennes.map((colonne) => (
                   <th
                     key={colonne.key}
-                    className={`border border-white px-1 py-1 text-center text-[11px] leading-tight ${
+                    className={`border border-white px-1 py-1 text-center text-xs leading-tight ${
                       colonne.key === "ficheRenseignement" ? "w-24" : "w-16"
                     }`}
                   >
@@ -540,29 +540,31 @@ export default function ElevesPage() {
                 <aside className="grid gap-4">
                   <section className="rounded-lg border border-slate-200 bg-slate-50 p-4">
                     <h3 className="font-bold text-slate-950">Photo</h3>
-                    <div className="mt-3 overflow-hidden rounded-lg border border-slate-200 bg-white">
-                      {photoEleveOuvert ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={photoEleveOuvert.dataUrl}
-                          alt={`Photo de ${eleveOuvert.nom} ${eleveOuvert.prenom}`}
-                          className="h-56 w-full object-cover"
+                    <div className="mt-3 flex flex-col items-center gap-3">
+                      <div className="aspect-[7/9] w-40 overflow-hidden rounded-lg border border-slate-200 bg-white">
+                        {photoEleveOuvert ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={photoEleveOuvert.dataUrl}
+                            alt={`Photo de ${eleveOuvert.nom} ${eleveOuvert.prenom}`}
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <div className="grid h-full place-items-center px-2 text-center text-sm text-slate-500">
+                            Aucune photo
+                          </div>
+                        )}
+                      </div>
+                      <label className="inline-flex cursor-pointer rounded-md bg-teal-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-teal-800 focus-within:outline-none focus-within:ring-2 focus-within:ring-teal-100">
+                        Importer une photo
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(event) => importerPhotoEleve(event.target.files?.[0])}
+                          className="sr-only"
                         />
-                      ) : (
-                        <div className="grid h-56 place-items-center text-sm text-slate-500">
-                          Aucune photo
-                        </div>
-                      )}
+                      </label>
                     </div>
-                    <label className="mt-3 inline-flex cursor-pointer rounded-md bg-teal-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-teal-800">
-                      Importer une photo
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={(event) => importerPhotoEleve(event.target.files?.[0])}
-                        className="sr-only"
-                      />
-                    </label>
                   </section>
 
                   <section className="rounded-lg border border-slate-200 bg-slate-50 p-4">

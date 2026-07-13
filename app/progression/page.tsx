@@ -405,12 +405,12 @@ export default function ProgressionPage() {
                 <div className="mt-5 grid gap-4 md:grid-cols-3 xl:grid-cols-6">
                   <article className="rounded-md bg-slate-100 p-4">
                     <p className="text-sm font-semibold text-slate-500">Progression moyenne</p>
-                    <p className="mt-3 text-3xl font-bold">{moyenneProgression(evaluationSelectionnee)}%</p>
+                    <p className="mt-3 text-4xl font-bold">{moyenneProgression(evaluationSelectionnee)}%</p>
                   </article>
                   {statistiques.map((stat) => (
                     <article key={stat.niveau} className={`rounded-md p-4 ${couleursNiveaux[stat.niveau]}`}>
                       <p className="text-sm font-semibold">{stat.niveau}</p>
-                      <p className="mt-3 text-3xl font-bold">{stat.total}</p>
+                      <p className="mt-3 text-4xl font-bold">{stat.total}</p>
                     </article>
                   ))}
                 </div>

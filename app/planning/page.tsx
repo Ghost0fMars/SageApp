@@ -291,7 +291,7 @@ export default function PlanningPage() {
                 {heures.map((heure) => (
                   <div
                     key={heure.label}
-                    className="absolute left-0 right-1 -translate-y-2 text-right text-[11px] text-slate-500"
+                    className="absolute left-0 right-1 -translate-y-2 text-right text-xs text-slate-500"
                     style={{ top: heure.top * hauteurTranche }}
                   >
                     {heure.label}
@@ -320,7 +320,7 @@ export default function PlanningPage() {
                       return (
                         <div
                           key={zone.id}
-                          className="pointer-events-none absolute left-1 right-1 overflow-hidden rounded-md border border-dashed px-1.5 py-1 text-[10px]"
+                          className="pointer-events-none absolute left-1 right-1 overflow-hidden rounded-md border border-dashed px-1.5 py-1 text-xs"
                           style={{
                             top,
                             height,
@@ -370,12 +370,12 @@ export default function PlanningPage() {
                             borderColor: getDisciplineColor(tuile.domaine).border
                           }}
                         >
-                          <p className="truncate text-[11px] font-semibold">
+                          <p className="truncate text-xs font-semibold">
                             {tuile.titreSequence}
                           </p>
-                          <p className="truncate text-[11px]">Séance {tuile.seanceLabel}</p>
-                          <p className="truncate text-[11px]">{tuile.domaine}</p>
-                          <p className="truncate text-[11px]">
+                          <p className="truncate text-xs">Séance {tuile.seanceLabel}</p>
+                          <p className="truncate text-xs">{tuile.domaine}</p>
+                          <p className="truncate text-xs">
                             {formatHeure(tuile.startMinute ?? debutJournee)} ·{" "}
                             {libelleDuree(tuile.dureeMinutes)}
                           </p>
@@ -388,7 +388,7 @@ export default function PlanningPage() {
           </section>
 
           <aside className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-            <h2 className="text-xl font-semibold text-slate-950">Réserve</h2>
+            <h2 className="text-xl font-bold text-slate-950">Réserve</h2>
             <p className="mt-2 text-sm leading-6 text-slate-700">
               Les séances envoyées depuis le formulaire arrivent ici avant d'être placées.
             </p>

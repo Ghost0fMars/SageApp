@@ -1,33 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import type {
+  ChartBlock,
+  CoursPresentation,
+  MediaBlock,
+  SchemaBlock,
+  Slide,
+  SlideBlock,
+  SlideMedia
+} from "../lib/course-types";
+import { renderChartSvg, renderSchemaSvg } from "../lib/course-graphics";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-
-type SlideMedia = {
-  type: "image" | "youtube";
-  src: string; // URL, base64 data URL, or YouTube video ID
-  legende?: string;
-  position: "dessus" | "gauche" | "droite" | "fond";
-};
-
-type Slide = {
-  titre: string;
-  type: string;
-  contenu: string[];
-  notes_enseignant: string;
-  interaction: string;
-  media?: SlideMedia;
-};
-
-type CoursPresentation = {
-  titre: string;
-  niveau: string;
-  objectif: string;
-  slides: Slide[];
-  deroule_projection: string[];
-  materiel: string[];
-};
 
 type Props = {
   open: boolean;
@@ -40,27 +25,61 @@ type Props = {
   };
   onClose: () => void;
   onSave?: (updatedCourse: CoursPresentation) => void;
+  onPrint?: () => void;
 };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const SLIDE_TYPE_LABELS: Record<string, { label: string; bg: string; text: string; accent: string }> = {
-  accroche:              { label: "Accroche",              bg: "bg-amber-950",  text: "text-amber-100",  accent: "text-amber-400"  },
-  recherche:             { label: "Recherche",             bg: "bg-slate-950",  text: "text-slate-100",  accent: "text-teal-400"   },
-  mise_en_commun:        { label: "Mise en commun",        bg: "bg-blue-950",   text: "text-blue-100",   accent: "text-blue-300"   },
-  institutionnalisation: { label: "Institutionnalisation", bg: "bg-teal-950",   text: "text-teal-100",   accent: "text-teal-300"   },
-  entrainement:          { label: "Entraînement",          bg: "bg-green-950",  text: "text-green-100",  accent: "text-green-400"  },
-  synthese:              { label: "Synthèse",              bg: "bg-purple-950", text: "text-purple-100", accent: "text-purple-300" },
+  accroche:              { label: "Accroche",              bg: "bg-[#032026]", text: "text-white", accent: "text-[#ffc145]" },
+  recherche:             { label: "Recherche",             bg: "bg-[#032026]", text: "text-white", accent: "text-[#ffb000]" },
+  mise_en_commun:        { label: "Mise en commun",        bg: "bg-[#032026]", text: "text-white", accent: "text-[#7fb8b0]" },
+  institutionnalisation: { label: "Institutionnalisation", bg: "bg-[#032026]", text: "text-white", accent: "text-[#006b60]" },
+  entrainement:          { label: "Entraînement",          bg: "bg-[#032026]", text: "text-white", accent: "text-[#ff8500]" },
+  synthese:              { label: "Synthèse",              bg: "bg-[#032026]", text: "text-white", accent: "text-[#ffc145]" },
 };
 
-const DEFAULT_STYLE = { label: "Cours", bg: "bg-slate-900", text: "text-white", accent: "text-slate-300" };
+const DEFAULT_STYLE = { label: "Cours", bg: "bg-[#032026]", text: "text-white", accent: "text-white/70" };
 
 function getSlideStyle(type: string) {
   return SLIDE_TYPE_LABELS[type] ?? DEFAULT_STYLE;
 }
 
 function emptySlide(): Slide {
-  return { titre: "Nouvelle diapositive", type: "cours", contenu: [], notes_enseignant: "", interaction: "" };
+  return {
+    id: crypto.randomUUID(),
+    titre: "Nouvelle diapositive",
+    type: "cours",
+    blocks: [],
+    notes_enseignant: "",
+    interaction: ""
+  };
+}
+
+function newBlock(type: SlideBlock["type"]): SlideBlock {
+  if (type === "text") {
+    return { id: crypto.randomUUID(), type: "text", style: "bullets", lignes: [""] };
+  }
+  if (type === "chart") {
+    return {
+      id: crypto.randomUUID(),
+      type: "chart",
+      chartType: "bar",
+      titre: "",
+      categories: ["", ""],
+      series: [{ nom: "", valeurs: [0, 0] }]
+    };
+  }
+  if (type === "schema") {
+    return {
+      id: crypto.randomUUID(),
+      type: "schema",
+      variant: "etapes",
+      titre: "",
+      etapes: [{ label: "" }, { label: "" }]
+    };
+  }
+  return { id: crypto.randomUUID(), type: "media", media: { type: "image", src: "", disposition: "dessus" } };
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -126,7 +145,7 @@ function MediaEditor({
       type: "image",
       src: urlInput.trim(),
       legende: media?.legende ?? "",
-      position: media?.position ?? "dessus",
+      disposition: media?.disposition ?? "dessus",
     });
   }
 
@@ -140,7 +159,7 @@ function MediaEditor({
         type: "image",
         src: dataUrl,
         legende: media?.legende ?? "",
-        position: media?.position ?? "dessus",
+        disposition: media?.disposition ?? "dessus",
       });
     } finally {
       setUploading(false);
@@ -153,7 +172,7 @@ function MediaEditor({
       type: "youtube",
       src: ytId,
       legende: media?.legende ?? "",
-      position: media?.position ?? "dessus",
+      disposition: media?.disposition ?? "dessus",
     });
   }
 
@@ -198,7 +217,6 @@ function MediaEditor({
       {/* Image tab */}
       {tab === "image" && (
         <div className="space-y-3">
-          {/* Current image preview */}
           {media?.type === "image" && (
             <div className="relative overflow-hidden rounded-lg">
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -210,7 +228,6 @@ function MediaEditor({
             </div>
           )}
 
-          {/* URL input */}
           <div>
             <label className="mb-1.5 block text-xs text-white/40">URL d'une image</label>
             <div className="flex gap-2">
@@ -220,7 +237,7 @@ function MediaEditor({
                 onChange={(e) => setUrlInput(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && applyImageUrl()}
                 placeholder="https://…"
-                className="flex-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-white placeholder-white/20 focus:border-teal-500 focus:outline-none"
+                className="flex-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-white placeholder-white/20 focus:border-teal-600 focus:outline-none"
               />
               <button
                 type="button"
@@ -233,7 +250,6 @@ function MediaEditor({
             </div>
           </div>
 
-          {/* File upload */}
           <div>
             <label className="mb-1.5 block text-xs text-white/40">Ou importer un fichier</label>
             <input
@@ -283,7 +299,7 @@ function MediaEditor({
                 onChange={(e) => setYtInput(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && applyYoutube()}
                 placeholder="https://youtube.com/watch?v=…"
-                className="flex-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-white placeholder-white/20 focus:border-teal-500 focus:outline-none"
+                className="flex-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-white placeholder-white/20 focus:border-teal-600 focus:outline-none"
               />
               <button
                 type="button"
@@ -301,7 +317,7 @@ function MediaEditor({
         </div>
       )}
 
-      {/* Shared: légende + position (only if media is set) */}
+      {/* Shared: légende + disposition (only if media is set) */}
       {hasMedia && (
         <>
           <div>
@@ -311,7 +327,7 @@ function MediaEditor({
               value={media!.legende ?? ""}
               onChange={(e) => onChange({ ...media!, legende: e.target.value })}
               placeholder="Source, description…"
-              className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-white placeholder-white/20 focus:border-teal-500 focus:outline-none"
+              className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-white placeholder-white/20 focus:border-teal-600 focus:outline-none"
             />
           </div>
 
@@ -324,9 +340,9 @@ function MediaEditor({
                   <button
                     key={pos}
                     type="button"
-                    onClick={() => onChange({ ...media!, position: pos })}
+                    onClick={() => onChange({ ...media!, disposition: pos })}
                     className={`flex-1 rounded-md py-1.5 text-xs font-medium capitalize transition ${
-                      media!.position === pos
+                      media!.disposition === pos
                         ? "bg-teal-600 text-white"
                         : "border border-white/10 text-white/50 hover:bg-white/10 hover:text-white"
                     }`}
@@ -342,7 +358,715 @@ function MediaEditor({
   );
 }
 
+// ─── Small block-editing primitives (used inside EditMode) ───────────────────
+
+function BulletListEditor({
+  items,
+  onChange,
+  placeholder = "Point"
+}: {
+  items: string[];
+  onChange: (items: string[]) => void;
+  placeholder?: string;
+}) {
+  function updateItem(i: number, value: string) {
+    const next = [...items];
+    next[i] = value;
+    onChange(next);
+  }
+  function addItem() {
+    onChange([...items, ""]);
+  }
+  function removeItem(i: number) {
+    onChange(items.filter((_, idx) => idx !== i));
+  }
+  return (
+    <div className="space-y-2">
+      {items.map((item, i) => (
+        <div key={i} className="flex items-center gap-2">
+          <span className="flex-shrink-0 text-sm text-white/30">▸</span>
+          <input
+            type="text"
+            value={item}
+            onChange={(e) => updateItem(i, e.target.value)}
+            className="flex-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder-white/20 focus:border-teal-600 focus:outline-none"
+            placeholder={`${placeholder} ${i + 1}`}
+          />
+          <button
+            type="button"
+            onClick={() => removeItem(i)}
+            className="grid h-8 w-8 flex-shrink-0 place-items-center rounded-lg text-white/30 transition hover:bg-white/10 hover:text-red-400"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M6 6l12 12M18 6L6 18"/></svg>
+          </button>
+        </div>
+      ))}
+      <button
+        type="button"
+        onClick={addItem}
+        className="flex items-center gap-1.5 text-xs text-white/40 transition hover:text-white/70"
+      >
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 5v14M5 12h14"/></svg>
+        Ajouter un point
+      </button>
+    </div>
+  );
+}
+
+function StepListEditor({
+  steps,
+  onChange,
+  withDate = false,
+  min = 2,
+  max = 8
+}: {
+  steps: { date?: string; label: string; description?: string }[];
+  onChange: (steps: { date?: string; label: string; description?: string }[]) => void;
+  withDate?: boolean;
+  min?: number;
+  max?: number;
+}) {
+  function update(i: number, patch: Partial<{ date: string; label: string; description: string }>) {
+    const next = [...steps];
+    next[i] = { ...next[i], ...patch };
+    onChange(next);
+  }
+  function add() {
+    if (steps.length >= max) return;
+    onChange([...steps, withDate ? { date: "", label: "" } : { label: "" }]);
+  }
+  function remove(i: number) {
+    if (steps.length <= min) return;
+    onChange(steps.filter((_, idx) => idx !== i));
+  }
+  return (
+    <div className="space-y-2">
+      {steps.map((step, i) => (
+        <div key={i} className="space-y-1.5 rounded-lg border border-white/10 bg-white/5 p-2.5">
+          <div className="flex items-center gap-2">
+            <span className="flex-shrink-0 text-xs font-bold text-white/30">{i + 1}</span>
+            {withDate && (
+              <input
+                type="text"
+                value={step.date ?? ""}
+                onChange={(e) => update(i, { date: e.target.value })}
+                placeholder="Date"
+                className="w-24 flex-shrink-0 rounded-md border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-white placeholder-white/20 focus:border-teal-600 focus:outline-none"
+              />
+            )}
+            <input
+              type="text"
+              value={step.label}
+              onChange={(e) => update(i, { label: e.target.value })}
+              placeholder="Libellé"
+              className="flex-1 rounded-md border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-white placeholder-white/20 focus:border-teal-600 focus:outline-none"
+            />
+            <button
+              type="button"
+              onClick={() => remove(i)}
+              disabled={steps.length <= min}
+              className="grid h-7 w-7 flex-shrink-0 place-items-center rounded text-white/30 transition hover:bg-white/10 hover:text-red-400 disabled:opacity-20"
+            >
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M6 6l12 12M18 6L6 18"/></svg>
+            </button>
+          </div>
+          <input
+            type="text"
+            value={step.description ?? ""}
+            onChange={(e) => update(i, { description: e.target.value })}
+            placeholder="Description (optionnelle)"
+            className="w-full rounded-md border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-white placeholder-white/20 focus:border-teal-600 focus:outline-none"
+          />
+        </div>
+      ))}
+      <button
+        type="button"
+        onClick={add}
+        disabled={steps.length >= max}
+        className="flex items-center gap-1.5 text-xs text-white/40 transition hover:text-white/70 disabled:opacity-30"
+      >
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 5v14M5 12h14"/></svg>
+        Ajouter une étape
+      </button>
+    </div>
+  );
+}
+
+function PointListEditor({
+  points,
+  onChange
+}: {
+  points: { numero: number; x: number; y: number; label: string }[];
+  onChange: (points: { numero: number; x: number; y: number; label: string }[]) => void;
+}) {
+  function update(i: number, patch: Partial<{ x: number; y: number; label: string }>) {
+    const next = [...points];
+    next[i] = { ...next[i], ...patch };
+    onChange(next);
+  }
+  function add() {
+    onChange([...points, { numero: points.length + 1, x: 50, y: 50, label: "" }]);
+  }
+  function remove(i: number) {
+    onChange(points.filter((_, idx) => idx !== i).map((p, idx) => ({ ...p, numero: idx + 1 })));
+  }
+  return (
+    <div className="space-y-2">
+      {points.map((point, i) => (
+        <div key={i} className="space-y-1.5 rounded-lg border border-white/10 bg-white/5 p-2.5">
+          <div className="flex items-center gap-2">
+            <span className="grid h-6 w-6 flex-shrink-0 place-items-center rounded-full bg-[#ffc145] text-xs font-bold text-[#032026]">
+              {point.numero}
+            </span>
+            <input
+              type="text"
+              value={point.label}
+              onChange={(e) => update(i, { label: e.target.value })}
+              placeholder="Libellé du point"
+              className="flex-1 rounded-md border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-white placeholder-white/20 focus:border-teal-600 focus:outline-none"
+            />
+            <button
+              type="button"
+              onClick={() => remove(i)}
+              className="grid h-7 w-7 flex-shrink-0 place-items-center rounded text-white/30 transition hover:bg-white/10 hover:text-red-400"
+            >
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M6 6l12 12M18 6L6 18"/></svg>
+            </button>
+          </div>
+          <div className="flex items-center gap-3 text-xs text-white/40">
+            <label className="flex flex-1 items-center gap-2">
+              X
+              <input type="range" min={0} max={100} value={point.x} onChange={(e) => update(i, { x: Number(e.target.value) })} className="flex-1" />
+            </label>
+            <label className="flex flex-1 items-center gap-2">
+              Y
+              <input type="range" min={0} max={100} value={point.y} onChange={(e) => update(i, { y: Number(e.target.value) })} className="flex-1" />
+            </label>
+          </div>
+        </div>
+      ))}
+      <button
+        type="button"
+        onClick={add}
+        className="flex items-center gap-1.5 text-xs text-white/40 transition hover:text-white/70"
+      >
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 5v14M5 12h14"/></svg>
+        Ajouter un point
+      </button>
+    </div>
+  );
+}
+
+function ComparaisonEditor({
+  colonnes,
+  onChange
+}: {
+  colonnes: { titre: string; points: string[] }[];
+  onChange: (colonnes: { titre: string; points: string[] }[]) => void;
+}) {
+  function updateTitre(i: number, titre: string) {
+    const next = [...colonnes];
+    next[i] = { ...next[i], titre };
+    onChange(next);
+  }
+  function updatePoints(i: number, points: string[]) {
+    const next = [...colonnes];
+    next[i] = { ...next[i], points };
+    onChange(next);
+  }
+  function add() {
+    if (colonnes.length >= 3) return;
+    onChange([...colonnes, { titre: "", points: [""] }]);
+  }
+  function remove(i: number) {
+    if (colonnes.length <= 2) return;
+    onChange(colonnes.filter((_, idx) => idx !== i));
+  }
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      {colonnes.map((col, i) => (
+        <div key={i} className="space-y-2 rounded-lg border border-white/10 bg-white/5 p-3">
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={col.titre}
+              onChange={(e) => updateTitre(i, e.target.value)}
+              placeholder={`Titre colonne ${i + 1}`}
+              className="flex-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-semibold text-white placeholder-white/20 focus:border-teal-600 focus:outline-none"
+            />
+            {colonnes.length > 2 && (
+              <button type="button" onClick={() => remove(i)} className="text-white/30 hover:text-red-400">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M6 6l12 12M18 6L6 18"/></svg>
+              </button>
+            )}
+          </div>
+          <BulletListEditor items={col.points} onChange={(points) => updatePoints(i, points)} />
+        </div>
+      ))}
+      {colonnes.length < 3 && (
+        <button
+          type="button"
+          onClick={add}
+          className="flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-white/20 py-3 text-xs text-white/40 transition hover:border-white/40 hover:text-white/70"
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 5v14M5 12h14"/></svg>
+          Ajouter une colonne
+        </button>
+      )}
+    </div>
+  );
+}
+
+function ChartBlockEditor({
+  block,
+  onChange
+}: {
+  block: ChartBlock;
+  onChange: (block: ChartBlock) => void;
+}) {
+  function updateCategory(i: number, value: string) {
+    const categories = [...block.categories];
+    categories[i] = value;
+    onChange({ ...block, categories });
+  }
+  function addCategory() {
+    if (block.categories.length >= 8) return;
+    onChange({
+      ...block,
+      categories: [...block.categories, ""],
+      series: block.series.map((s) => ({ ...s, valeurs: [...s.valeurs, 0] }))
+    });
+  }
+  function removeCategory(i: number) {
+    if (block.categories.length <= 2) return;
+    onChange({
+      ...block,
+      categories: block.categories.filter((_, idx) => idx !== i),
+      series: block.series.map((s) => ({ ...s, valeurs: s.valeurs.filter((_, idx) => idx !== i) }))
+    });
+  }
+  function updateSerieNom(si: number, nom: string) {
+    const series = [...block.series];
+    series[si] = { ...series[si], nom };
+    onChange({ ...block, series });
+  }
+  function updateValeur(si: number, ci: number, value: number) {
+    const series = [...block.series];
+    const valeurs = [...series[si].valeurs];
+    valeurs[ci] = value;
+    series[si] = { ...series[si], valeurs };
+    onChange({ ...block, series });
+  }
+  function addSerie() {
+    if (block.series.length >= 4) return;
+    onChange({ ...block, series: [...block.series, { nom: "", valeurs: block.categories.map(() => 0) }] });
+  }
+  function removeSerie(si: number) {
+    if (block.series.length <= 1) return;
+    onChange({ ...block, series: block.series.filter((_, idx) => idx !== si) });
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex gap-1.5">
+        {(["bar", "line", "pie"] as const).map((ct) => (
+          <button
+            key={ct}
+            type="button"
+            onClick={() => onChange({ ...block, chartType: ct, series: ct === "pie" ? [block.series[0]] : block.series })}
+            className={`flex-1 rounded-md py-1.5 text-xs font-semibold transition ${
+              block.chartType === ct ? "bg-teal-600 text-white" : "border border-white/10 text-white/50 hover:bg-white/10 hover:text-white"
+            }`}
+          >
+            {ct === "bar" ? "Barres" : ct === "line" ? "Courbes" : "Camembert"}
+          </button>
+        ))}
+      </div>
+      <div className="flex gap-2">
+        <input
+          type="text"
+          value={block.titre ?? ""}
+          onChange={(e) => onChange({ ...block, titre: e.target.value })}
+          placeholder="Titre du graphique"
+          className="flex-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs text-white placeholder-white/20 focus:border-teal-600 focus:outline-none"
+        />
+        <input
+          type="text"
+          value={block.unite ?? ""}
+          onChange={(e) => onChange({ ...block, unite: e.target.value })}
+          placeholder="Unité"
+          className="w-24 rounded-md border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs text-white placeholder-white/20 focus:border-teal-600 focus:outline-none"
+        />
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr>
+              <th className="pb-1 text-left text-white/40">Catégorie</th>
+              {block.series.map((s, si) => (
+                <th key={si} className="pb-1 pl-2">
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="text"
+                      value={s.nom}
+                      onChange={(e) => updateSerieNom(si, e.target.value)}
+                      placeholder={`Série ${si + 1}`}
+                      className="w-20 rounded border border-white/10 bg-white/5 px-1.5 py-1 text-white placeholder-white/20 focus:border-teal-600 focus:outline-none"
+                    />
+                    {block.chartType !== "pie" && block.series.length > 1 && (
+                      <button type="button" onClick={() => removeSerie(si)} className="text-white/30 hover:text-red-400">
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M6 6l12 12M18 6L6 18"/></svg>
+                      </button>
+                    )}
+                  </div>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {block.categories.map((cat, ci) => (
+              <tr key={ci}>
+                <td className="py-1 pr-2">
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="text"
+                      value={cat}
+                      onChange={(e) => updateCategory(ci, e.target.value)}
+                      placeholder={`Catégorie ${ci + 1}`}
+                      className="w-24 rounded border border-white/10 bg-white/5 px-1.5 py-1 text-white placeholder-white/20 focus:border-teal-600 focus:outline-none"
+                    />
+                    {block.categories.length > 2 && (
+                      <button type="button" onClick={() => removeCategory(ci)} className="text-white/30 hover:text-red-400">
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M6 6l12 12M18 6L6 18"/></svg>
+                      </button>
+                    )}
+                  </div>
+                </td>
+                {block.series.map((s, si) => (
+                  <td key={si} className="py-1 pl-2">
+                    <input
+                      type="number"
+                      value={s.valeurs[ci]}
+                      onChange={(e) => updateValeur(si, ci, Number(e.target.value))}
+                      className="w-16 rounded border border-white/10 bg-white/5 px-1.5 py-1 text-white focus:border-teal-600 focus:outline-none"
+                    />
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="flex gap-3">
+        <button type="button" onClick={addCategory} disabled={block.categories.length >= 8} className="flex items-center gap-1.5 text-xs text-white/40 transition hover:text-white/70 disabled:opacity-30">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 5v14M5 12h14"/></svg>
+          Catégorie
+        </button>
+        {block.chartType !== "pie" && (
+          <button type="button" onClick={addSerie} disabled={block.series.length >= 4} className="flex items-center gap-1.5 text-xs text-white/40 transition hover:text-white/70 disabled:opacity-30">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 5v14M5 12h14"/></svg>
+            Série
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SchemaBlockEditor({
+  block,
+  onChange
+}: {
+  block: SchemaBlock;
+  onChange: (block: SchemaBlock) => void;
+}) {
+  const variants: { value: SchemaBlock["variant"]; label: string }[] = [
+    { value: "frise", label: "Frise" },
+    { value: "cycle", label: "Cycle" },
+    { value: "etapes", label: "Étapes" },
+    { value: "legende", label: "Figure légendée" },
+    { value: "comparaison", label: "Comparaison" }
+  ];
+
+  function switchVariant(variant: SchemaBlock["variant"]) {
+    const titre = block.titre;
+    if (variant === "frise") {
+      onChange({ id: block.id, type: "schema", variant, titre, evenements: [{ date: "", label: "" }, { date: "", label: "" }] });
+    } else if (variant === "cycle") {
+      onChange({ id: block.id, type: "schema", variant, titre, etapes: [{ label: "" }, { label: "" }, { label: "" }] });
+    } else if (variant === "etapes") {
+      onChange({ id: block.id, type: "schema", variant, titre, etapes: [{ label: "" }, { label: "" }] });
+    } else if (variant === "legende") {
+      onChange({ id: block.id, type: "schema", variant, titre, points: [] });
+    } else {
+      onChange({ id: block.id, type: "schema", variant, titre, colonnes: [{ titre: "", points: [""] }, { titre: "", points: [""] }] });
+    }
+  }
+
+  const variantSelect = (
+    <select
+      value={block.variant}
+      onChange={(e) => switchVariant(e.target.value as SchemaBlock["variant"])}
+      className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-white focus:border-teal-600 focus:outline-none"
+    >
+      {variants.map((v) => (
+        <option key={v.value} value={v.value} className="bg-slate-900">{v.label}</option>
+      ))}
+    </select>
+  );
+
+  const titreInput = (
+    <input
+      type="text"
+      value={block.titre ?? ""}
+      onChange={(e) => onChange({ ...block, titre: e.target.value } as SchemaBlock)}
+      placeholder="Titre du schéma (optionnel)"
+      className="w-full rounded-md border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs text-white placeholder-white/20 focus:border-teal-600 focus:outline-none"
+    />
+  );
+
+  if (block.variant === "frise") {
+    return (
+      <div className="space-y-3">
+        {variantSelect}
+        {titreInput}
+        <StepListEditor
+          withDate
+          min={2}
+          max={8}
+          steps={block.evenements}
+          onChange={(evenements) =>
+            onChange({
+              ...block,
+              evenements: evenements.map((s) => ({ date: s.date ?? "", label: s.label, description: s.description }))
+            })
+          }
+        />
+      </div>
+    );
+  }
+
+  if (block.variant === "cycle" || block.variant === "etapes") {
+    return (
+      <div className="space-y-3">
+        {variantSelect}
+        {titreInput}
+        <StepListEditor
+          min={block.variant === "cycle" ? 3 : 2}
+          max={8}
+          steps={block.etapes}
+          onChange={(etapes) =>
+            onChange({ ...block, etapes: etapes.map((s) => ({ label: s.label, description: s.description })) })
+          }
+        />
+      </div>
+    );
+  }
+
+  if (block.variant === "legende") {
+    return (
+      <div className="space-y-3">
+        {variantSelect}
+        {titreInput}
+        <MediaEditor
+          media={block.image?.src ? { type: "image", src: block.image.src, disposition: "dessus" } : undefined}
+          onChange={(m) => onChange({ ...block, image: m ? { src: m.src } : undefined })}
+        />
+        <PointListEditor points={block.points} onChange={(points) => onChange({ ...block, points })} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {variantSelect}
+      {titreInput}
+      <ComparaisonEditor colonnes={block.colonnes} onChange={(colonnes) => onChange({ ...block, colonnes })} />
+    </div>
+  );
+}
+
+function BlockCard({
+  block,
+  index,
+  total,
+  onChange,
+  onMove,
+  onRemove
+}: {
+  block: SlideBlock;
+  index: number;
+  total: number;
+  onChange: (block: SlideBlock) => void;
+  onMove: (dir: -1 | 1) => void;
+  onRemove: () => void;
+}) {
+  const kindLabel =
+    block.type === "text" ? "Texte" : block.type === "chart" ? "Graphique" : block.type === "schema" ? "Schéma" : "Média";
+
+  return (
+    <div className="space-y-3 rounded-lg border border-white/10 bg-white/5 p-3">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-bold uppercase tracking-wide text-white/40">{kindLabel}</span>
+        <div className="flex items-center gap-1">
+          <button type="button" onClick={() => onMove(-1)} disabled={index === 0} className="grid h-6 w-6 place-items-center rounded text-white/30 hover:text-white disabled:opacity-20">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M18 15l-6-6-6 6"/></svg>
+          </button>
+          <button type="button" onClick={() => onMove(1)} disabled={index === total - 1} className="grid h-6 w-6 place-items-center rounded text-white/30 hover:text-white disabled:opacity-20">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+          <button type="button" onClick={onRemove} className="grid h-6 w-6 place-items-center rounded text-white/30 hover:text-red-400">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M6 6l12 12M18 6L6 18"/></svg>
+          </button>
+        </div>
+      </div>
+
+      {block.type === "text" && (
+        <div className="space-y-2">
+          <div className="flex gap-1.5">
+            {(["bullets", "paragraph"] as const).map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => onChange({ ...block, style: s })}
+                className={`rounded-md px-2.5 py-1 text-xs font-medium transition ${
+                  (block.style ?? "bullets") === s ? "bg-teal-600 text-white" : "border border-white/10 text-white/50 hover:bg-white/10 hover:text-white"
+                }`}
+              >
+                {s === "bullets" ? "Puces" : "Paragraphe"}
+              </button>
+            ))}
+          </div>
+          <BulletListEditor items={block.lignes} onChange={(lignes) => onChange({ ...block, lignes })} />
+        </div>
+      )}
+      {block.type === "chart" && <ChartBlockEditor block={block} onChange={onChange} />}
+      {block.type === "schema" && <SchemaBlockEditor block={block} onChange={onChange} />}
+      {block.type === "media" && (
+        <MediaEditor
+          media={block.media.src ? block.media : undefined}
+          onChange={(m) => (m ? onChange({ ...block, media: m }) : onRemove())}
+        />
+      )}
+    </div>
+  );
+}
+
+function AddBlockMenu({ onAdd }: { onAdd: (type: SlideBlock["type"]) => void }) {
+  const [open, setOpen] = useState(false);
+  const options: { type: SlideBlock["type"]; label: string }[] = [
+    { type: "text", label: "Texte" },
+    { type: "chart", label: "Graphique" },
+    { type: "schema", label: "Schéma" },
+    { type: "media", label: "Média" }
+  ];
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-white/20 py-2.5 text-xs text-white/40 transition hover:border-white/40 hover:text-white/70"
+      >
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 5v14M5 12h14"/></svg>
+        Ajouter un bloc
+      </button>
+      {open && (
+        <div className="absolute left-0 right-0 top-full z-10 mt-1 overflow-hidden rounded-lg border border-white/10 bg-slate-900 shadow-2xl">
+          {options.map((opt) => (
+            <button
+              key={opt.type}
+              type="button"
+              onClick={() => {
+                onAdd(opt.type);
+                setOpen(false);
+              }}
+              className="block w-full px-4 py-2 text-left text-xs text-white/70 transition hover:bg-white/10 hover:text-white"
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Slide renderer (presentation mode) ───────────────────────────────────────
+
+function BlockRenderer({ block, style }: { block: SlideBlock; style: { text: string; accent: string } }) {
+  if (block.type === "text") {
+    if (block.style === "paragraph") {
+      return (
+        <div className={`space-y-3 text-left text-lg leading-snug sm:text-xl ${style.text} opacity-90`}>
+          {block.lignes.map((ligne, i) => (
+            <p key={i}>{ligne}</p>
+          ))}
+        </div>
+      );
+    }
+    return (
+      <ul className="space-y-4">
+        {block.lignes.map((ligne, i) => (
+          <li key={i} className={`flex items-start gap-3 text-left text-lg leading-snug sm:text-xl ${style.text} opacity-90`}>
+            <span className={`mt-1 flex-shrink-0 text-lg ${style.accent}`}>▸</span>
+            <span>{ligne}</span>
+          </li>
+        ))}
+      </ul>
+    );
+  }
+  if (block.type === "chart") {
+    return (
+      <div
+        className="w-full"
+        dangerouslySetInnerHTML={{ __html: renderChartSvg(block, { palette: "screen", width: 480, height: 280 }) }}
+      />
+    );
+  }
+  if (block.type === "schema") {
+    return (
+      <div
+        className="w-full"
+        dangerouslySetInnerHTML={{ __html: renderSchemaSvg(block, { palette: "screen", width: 560, height: 300 }) }}
+      />
+    );
+  }
+  return null;
+}
+
+function renderMediaEl(media: SlideMedia) {
+  if (media.type === "image") {
+    return (
+      <div className="flex flex-col items-center gap-2">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={media.src}
+          alt={media.legende ?? ""}
+          className="max-h-64 max-w-full rounded-xl object-contain shadow-2xl"
+          style={{ maxHeight: media.disposition === "dessus" ? "40vh" : "55vh" }}
+        />
+        {media.legende && <p className="text-xs text-white/40 italic">{media.legende}</p>}
+      </div>
+    );
+  }
+  if (media.type === "youtube") {
+    return (
+      <div className="flex flex-col items-center gap-2" onClick={(e) => e.stopPropagation()}>
+        <div className="overflow-hidden rounded-xl shadow-2xl" style={{ width: "min(560px, 100%)", aspectRatio: "16/9" }}>
+          <iframe
+            src={`https://www.youtube.com/embed/${media.src}?rel=0`}
+            className="h-full w-full"
+            allowFullScreen
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          />
+        </div>
+        {media.legende && <p className="text-xs text-white/40 italic">{media.legende}</p>}
+      </div>
+    );
+  }
+  return null;
+}
 
 function SlideContent({
   slide,
@@ -353,69 +1077,42 @@ function SlideContent({
   style: { label: string; bg: string; text: string; accent: string };
   onNext: () => void;
 }) {
-  const media = slide.media;
-  const hasText = !!slide.titre || (slide.contenu ?? []).length > 0;
+  const mediaBlock = slide.blocks.find(
+    (b): b is MediaBlock => b.type === "media" && !!b.media.src
+  );
+  const otherBlocks = slide.blocks.filter((b) => b !== mediaBlock);
+  const hasOther = otherBlocks.length > 0;
 
-  const textBlock = (
-    <div className="text-center">
-      <h2 className={`text-3xl font-black leading-tight sm:text-4xl lg:text-5xl ${style.text}`}>
-        {slide.titre}
-      </h2>
-      {(slide.contenu ?? []).length > 0 && (
-        <ul className="mt-8 space-y-4">
-          {(slide.contenu ?? []).map((ligne, i) => (
-            <li key={i} className={`flex items-start gap-3 text-left text-lg leading-snug sm:text-xl ${style.text} opacity-90`}>
-              <span className={`mt-1 flex-shrink-0 text-lg ${style.accent}`}>▸</span>
-              <span>{ligne}</span>
-            </li>
-          ))}
-        </ul>
-      )}
+  const contentStack = (
+    <div className="space-y-6">
+      {otherBlocks.map((b) => (
+        <BlockRenderer key={b.id} block={b} style={style} />
+      ))}
       {slide.interaction && (
-        <div className="mt-8 inline-flex items-center gap-2 rounded-full bg-white/10 px-5 py-2">
+        <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-5 py-2">
           <span className="text-sm font-semibold text-white/80">👥 {slide.interaction}</span>
         </div>
       )}
     </div>
   );
 
-  const imageEl = media?.type === "image" ? (
-    <div className="flex flex-col items-center gap-2">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={media.src}
-        alt={media.legende ?? ""}
-        className="max-h-64 max-w-full rounded-xl object-contain shadow-2xl"
-        style={{ maxHeight: media.position === "dessus" ? "40vh" : "55vh" }}
-      />
-      {media.legende && (
-        <p className="text-xs text-white/40 italic">{media.legende}</p>
-      )}
-    </div>
-  ) : media?.type === "youtube" ? (
-    <div className="flex flex-col items-center gap-2" onClick={(e) => e.stopPropagation()}>
-      <div className="overflow-hidden rounded-xl shadow-2xl" style={{ width: "min(560px, 100%)", aspectRatio: "16/9" }}>
-        <iframe
-          src={`https://www.youtube.com/embed/${media.src}?rel=0`}
-          className="h-full w-full"
-          allowFullScreen
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-        />
-      </div>
-      {media.legende && (
-        <p className="text-xs text-white/40 italic">{media.legende}</p>
-      )}
-    </div>
+  const titleEl = slide.titre ? (
+    <h2 className={`text-3xl font-black leading-tight sm:text-4xl lg:text-5xl ${style.text}`}>{slide.titre}</h2>
   ) : null;
 
-  // Layout based on position
-  if (!media || !imageEl) {
+  const fullStack = (
+    <div className="w-full max-w-3xl space-y-6 text-center">
+      {titleEl}
+      {contentStack}
+    </div>
+  );
+
+  const imageEl = mediaBlock ? renderMediaEl(mediaBlock.media) : null;
+
+  if (!mediaBlock || !imageEl) {
     return (
-      <div
-        className="flex flex-1 cursor-pointer flex-col items-center justify-center px-8 py-10 sm:px-16"
-        onClick={onNext}
-      >
-        <div className="w-full max-w-3xl">{textBlock}</div>
+      <div className="flex flex-1 cursor-pointer flex-col items-center justify-center px-8 py-10 sm:px-16" onClick={onNext}>
+        {fullStack}
         <p className="absolute bottom-6 text-xs text-white/20">
           Clic ou → pour avancer · Esc pour fermer · N pour les notes
         </p>
@@ -423,18 +1120,18 @@ function SlideContent({
     );
   }
 
-  if (media.position === "fond") {
+  if (mediaBlock.media.disposition === "fond") {
     return (
       <div className="relative flex flex-1 cursor-pointer items-center justify-center px-8 py-10 sm:px-16" onClick={onNext}>
         <div className="absolute inset-0 overflow-hidden">
-          {media.type === "image" && (
+          {mediaBlock.media.type === "image" && (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={media.src} alt="" className="h-full w-full object-cover opacity-20" />
+            <img src={mediaBlock.media.src} alt="" className="h-full w-full object-cover opacity-20" />
           )}
         </div>
-        <div className="relative z-10 w-full max-w-3xl">{textBlock}</div>
-        {media.legende && (
-          <p className="absolute bottom-8 left-0 right-0 text-center text-xs text-white/30 italic">{media.legende}</p>
+        <div className="relative z-10">{fullStack}</div>
+        {mediaBlock.media.legende && (
+          <p className="absolute bottom-8 left-0 right-0 text-center text-xs text-white/30 italic">{mediaBlock.media.legende}</p>
         )}
         <p className="absolute bottom-2 text-xs text-white/20">
           Clic ou → pour avancer · Esc pour fermer · N pour les notes
@@ -443,11 +1140,11 @@ function SlideContent({
     );
   }
 
-  if (media.position === "dessus") {
+  if (mediaBlock.media.disposition === "dessus") {
     return (
       <div className="flex flex-1 cursor-pointer flex-col items-center justify-center gap-6 px-8 py-8 sm:px-16" onClick={onNext}>
         {imageEl}
-        {hasText && <div className="w-full max-w-3xl">{textBlock}</div>}
+        {(slide.titre || hasOther) && fullStack}
         <p className="absolute bottom-6 text-xs text-white/20">
           Clic ou → pour avancer · Esc pour fermer · N pour les notes
         </p>
@@ -455,9 +1152,8 @@ function SlideContent({
     );
   }
 
-  // gauche / droite
-  const leftEl = media.position === "gauche" ? imageEl : <div className="w-full max-w-xl">{textBlock}</div>;
-  const rightEl = media.position === "gauche" ? <div className="w-full max-w-xl">{textBlock}</div> : imageEl;
+  const leftEl = mediaBlock.media.disposition === "gauche" ? imageEl : <div className="w-full max-w-xl">{fullStack}</div>;
+  const rightEl = mediaBlock.media.disposition === "gauche" ? <div className="w-full max-w-xl">{fullStack}</div> : imageEl;
 
   return (
     <div className="flex flex-1 cursor-pointer items-center gap-10 px-10 py-8 sm:px-16" onClick={onNext}>
@@ -500,18 +1196,24 @@ function EditMode({
     setHasChanges(true);
   }
 
-  function updateBullet(i: number, value: string) {
-    const contenu = [...(slide.contenu ?? [])];
-    contenu[i] = value;
-    update({ contenu });
+  function addBlock(type: SlideBlock["type"]) {
+    update({ blocks: [...slide.blocks, newBlock(type)] });
   }
 
-  function addBullet() {
-    update({ contenu: [...(slide.contenu ?? []), ""] });
+  function updateBlock(blockId: string, patch: SlideBlock) {
+    update({ blocks: slide.blocks.map((b) => (b.id === blockId ? patch : b)) });
   }
 
-  function removeBullet(i: number) {
-    update({ contenu: (slide.contenu ?? []).filter((_, idx) => idx !== i) });
+  function moveBlock(index: number, dir: -1 | 1) {
+    const j = index + dir;
+    if (j < 0 || j >= slide.blocks.length) return;
+    const blocks = [...slide.blocks];
+    [blocks[index], blocks[j]] = [blocks[j], blocks[index]];
+    update({ blocks });
+  }
+
+  function removeBlock(blockId: string) {
+    update({ blocks: slide.blocks.filter((b) => b.id !== blockId) });
   }
 
   function addSlideAfter(i: number) {
@@ -590,9 +1292,10 @@ function EditMode({
         <div className="flex w-56 flex-shrink-0 flex-col overflow-y-auto border-r border-white/10 bg-black/30 py-3">
           {slides.map((s, i) => {
             const st = getSlideStyle(s.type);
+            const hasMedia = s.blocks.some((b) => b.type === "media");
             return (
               <div
-                key={i}
+                key={s.id}
                 onClick={() => setSelected(i)}
                 className={`group relative mx-2 mb-1 cursor-pointer rounded-lg px-3 py-2 transition ${
                   i === selected ? "bg-white/15 ring-1 ring-white/20" : "hover:bg-white/5"
@@ -633,12 +1336,9 @@ function EditMode({
                   </div>
                 </div>
                 <p className="mt-0.5 truncate text-xs text-white/50">{s.titre}</p>
-                {s.media && (
+                {hasMedia && (
                   <span className="mt-1 inline-flex items-center gap-1 text-xs text-white/30">
-                    {s.media.type === "youtube"
-                      ? <><svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg> Vidéo</>
-                      : <><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg> Image</>
-                    }
+                    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg> Média
                   </span>
                 )}
               </div>
@@ -665,7 +1365,7 @@ function EditMode({
               <select
                 value={slide.type}
                 onChange={(e) => update({ type: e.target.value })}
-                className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:border-teal-500 focus:outline-none"
+                className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:border-teal-600 focus:outline-none"
               >
                 {Object.entries(SLIDE_TYPE_LABELS).map(([value, { label }]) => (
                   <option key={value} value={value} className="bg-slate-900">{label}</option>
@@ -681,52 +1381,28 @@ function EditMode({
                 type="text"
                 value={slide.titre ?? ""}
                 onChange={(e) => update({ titre: e.target.value })}
-                className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder-white/20 focus:border-teal-500 focus:outline-none"
+                className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder-white/20 focus:border-teal-600 focus:outline-none"
                 placeholder="Titre de la diapositive"
               />
             </div>
 
-            {/* Contenu */}
+            {/* Blocs */}
             <div>
               <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-white/40">Contenu</label>
-              <div className="space-y-2">
-                {(slide.contenu ?? []).map((ligne, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <span className="flex-shrink-0 text-sm text-white/30">▸</span>
-                    <input
-                      type="text"
-                      value={ligne}
-                      onChange={(e) => updateBullet(i, e.target.value)}
-                      className="flex-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder-white/20 focus:border-teal-500 focus:outline-none"
-                      placeholder={`Point ${i + 1}`}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => removeBullet(i)}
-                      className="grid h-8 w-8 flex-shrink-0 place-items-center rounded-lg text-white/30 transition hover:bg-white/10 hover:text-red-400"
-                    >
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M6 6l12 12M18 6L6 18"/></svg>
-                    </button>
-                  </div>
+              <div className="space-y-3">
+                {slide.blocks.map((block, i) => (
+                  <BlockCard
+                    key={block.id}
+                    block={block}
+                    index={i}
+                    total={slide.blocks.length}
+                    onChange={(patch) => updateBlock(block.id, patch)}
+                    onMove={(dir) => moveBlock(i, dir)}
+                    onRemove={() => removeBlock(block.id)}
+                  />
                 ))}
-                <button
-                  type="button"
-                  onClick={addBullet}
-                  className="flex items-center gap-1.5 text-xs text-white/40 transition hover:text-white/70"
-                >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 5v14M5 12h14"/></svg>
-                  Ajouter un point
-                </button>
+                <AddBlockMenu onAdd={addBlock} />
               </div>
-            </div>
-
-            {/* Média */}
-            <div>
-              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-white/40">Média</label>
-              <MediaEditor
-                media={slide.media}
-                onChange={(m) => update({ media: m })}
-              />
             </div>
 
             {/* Interaction */}
@@ -736,7 +1412,7 @@ function EditMode({
                 type="text"
                 value={slide.interaction ?? ""}
                 onChange={(e) => update({ interaction: e.target.value })}
-                className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder-white/20 focus:border-teal-500 focus:outline-none"
+                className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder-white/20 focus:border-teal-600 focus:outline-none"
                 placeholder="Ex : Débat en groupe, exercice individuel…"
               />
             </div>
@@ -748,7 +1424,7 @@ function EditMode({
                 value={slide.notes_enseignant ?? ""}
                 onChange={(e) => update({ notes_enseignant: e.target.value })}
                 rows={4}
-                className="w-full resize-none rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder-white/20 focus:border-teal-500 focus:outline-none"
+                className="w-full resize-none rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder-white/20 focus:border-teal-600 focus:outline-none"
                 placeholder="Notes visibles uniquement par l'enseignant…"
               />
             </div>
@@ -782,7 +1458,7 @@ function EditMode({
 
 // ─── CoursViewer (presentation mode) ─────────────────────────────────────────
 
-export default function CoursViewer({ open, cours, onClose, onSave }: Props) {
+export default function CoursViewer({ open, cours, onClose, onSave, onPrint }: Props) {
   const [current, setCurrent] = useState(0);
   const [showNotes, setShowNotes] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -879,6 +1555,19 @@ export default function CoursViewer({ open, cours, onClose, onSave }: Props) {
               Éditer
             </button>
           )}
+          {onPrint && (
+            <button
+              type="button"
+              onClick={onPrint}
+              title="Imprimer / exporter"
+              className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold text-white/40 transition hover:bg-white/10 hover:text-white/80"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>
+              </svg>
+              Imprimer
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setShowNotes((v) => !v)}
@@ -943,7 +1632,7 @@ export default function CoursViewer({ open, cours, onClose, onSave }: Props) {
         <div className="flex max-w-xs gap-1 overflow-x-auto sm:max-w-sm">
           {cours.course.slides.map((s, i) => (
             <button
-              key={i}
+              key={s.id}
               type="button"
               onClick={(e) => { e.stopPropagation(); setCurrent(i); }}
               title={`${i + 1}. ${s.titre}`}

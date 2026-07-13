@@ -427,7 +427,7 @@ export default function AssistantChat() {
                 </svg>
               </button>
             </div>
-            <p className="mt-1.5 text-center text-[11px] leading-4 text-slate-400 sm:text-xs">
+            <p className="mt-1.5 text-center text-xs leading-4 text-slate-400">
               Entrée pour envoyer · Maj+Entrée pour nouvelle ligne
             </p>
           </div>

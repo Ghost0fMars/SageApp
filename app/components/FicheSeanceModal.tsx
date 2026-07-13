@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import GeneratingLabel from "./GeneratingLabel";
 
 type PhaseSeanceDetaillee = {
   nom: string;
@@ -307,17 +308,25 @@ export default function FicheSeanceModal({
               type="button"
               onClick={() => onGenerateStudentActivity?.(local)}
               disabled={!onGenerateStudentActivity || studentActivityLoading}
-              className="rounded-md border border-teal-200 bg-teal-50 px-4 py-3 text-sm font-semibold text-teal-900 shadow-sm transition hover:bg-teal-100 focus:outline-none focus:ring-2 focus:ring-teal-200"
+              className="min-w-[190px] rounded-md border border-teal-200 bg-teal-50 px-4 py-3 text-center text-sm font-semibold text-teal-900 shadow-sm transition hover:bg-teal-100 focus:outline-none focus:ring-2 focus:ring-teal-200"
             >
-              {studentActivityLoading ? "Génération..." : "Fiche élève"}
+              <GeneratingLabel
+                active={studentActivityLoading}
+                idleLabel="Fiche élève"
+                messages={["Adaptation pour l'élève...", "Mise en forme de la fiche..."]}
+              />
             </button>
             <button
               type="button"
               onClick={() => onGenerateCourse?.(local)}
               disabled={!onGenerateCourse || courseLoading}
-              className="rounded-md border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-900 shadow-sm transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-300"
+              className="min-w-[170px] rounded-md border border-slate-300 bg-white px-4 py-3 text-center text-sm font-semibold text-slate-900 shadow-sm transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-300"
             >
-              {courseLoading ? "Génération..." : "Cours"}
+              <GeneratingLabel
+                active={courseLoading}
+                idleLabel="Cours"
+                messages={["Rédaction du cours...", "Mise en page du support..."]}
+              />
             </button>
           </div>
         </div>
